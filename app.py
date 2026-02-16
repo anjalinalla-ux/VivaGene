@@ -1,23 +1,630 @@
 import streamlit as st
 import csv
 import json
+import re
+import traceback
+from pathlib import Path
 from genomics_interpreter import (
     TRAIT_DB_PATH,
-    load_trait_database,
-    parse_genotype_file,
-    match_traits,
-    build_report_object,
-    generate_ai_summary,
+    TRAITS_JSON_PATH,
+    load_traits_catalog,
+    build_prs_report_from_upload,
     generate_text_report,
     generate_html_report,
 )
-from openai import OpenAI
+import os
+from utils.trait_quality import compute_trait_completeness, trait_has_variants
+from rag_retrieval import load_study_packs, retrieve_evidence
+from polygenic import compute_prs
+from evidence_guard import enforce_evidence_only
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
+BASE_DIR = Path(__file__).resolve().parent
+STUDY_PACK_DIR = BASE_DIR / "trait_study_packs"
 
-client = OpenAI()  # uses your OPENAI_API_KEY
+def normalize_report(report_obj):
+    """Ensure downstream renderers receive a dict with .get().
+
+    Some helper functions may return a list of trait dicts, or a dict whose
+    `traits` field contains non-dict entries. This normalizes to:
+    {"summary": {...}, "traits": [<dict>, ...]}
+    """
+
+    # Case 1: report_obj is already a list of traits
+    if isinstance(report_obj, list):
+        traits = [t for t in report_obj if isinstance(t, dict)]
+        categories = sorted({t.get("category", "") for t in traits if t.get("category")})
+        return {
+            "summary": {
+                "num_traits_found": len(traits),
+                "categories": categories,
+            },
+            "traits": traits,
+        }
+
+    # Case 2: report_obj is a dict-like report
+    if isinstance(report_obj, dict):
+        report_obj.setdefault("summary", {})
+        raw_traits = report_obj.get("traits", [])
+
+        # Force traits to be a list of dicts only
+        traits = [t for t in raw_traits if isinstance(t, dict)] if isinstance(raw_traits, list) else []
+        report_obj["traits"] = traits
+
+        # Build / backfill summary fields
+        if not isinstance(report_obj["summary"], dict):
+            report_obj["summary"] = {}
+
+        report_obj["summary"].setdefault("num_traits_found", len(traits))
+        report_obj["summary"].setdefault(
+            "categories",
+            sorted({t.get("category", "") for t in traits if t.get("category")}),
+        )
+
+        return report_obj
+
+    # Fallback
+    return {"summary": {"num_traits_found": 0, "categories": []}, "traits": []}
+
+
+FLAG_ORDER = {"High": 0, "Medium": 1, "Low": 2}
+EVIDENCE_ORDER = {"High": 0, "Moderate": 1, "Emerging": 2}
+
+
+def sort_traits_for_display(traits):
+    items = [t for t in (traits or []) if isinstance(t, dict)]
+
+    def evidence_rank(value):
+        v = str(value or "").strip()
+        if not v:
+            return 99
+        v_norm = v.capitalize()
+        if v.lower() == "strong":
+            v_norm = "High"
+        return EVIDENCE_ORDER.get(v_norm, 99)
+
+    def key_fn(t):
+        flag = str(t.get("flag_level", "")).strip().capitalize()
+        return (
+            FLAG_ORDER.get(flag, 99),
+            evidence_rank(t.get("evidence_strength")),
+            str(t.get("trait_name", "")).strip().lower(),
+        )
+
+    return sorted(items, key=key_fn)
+
+
+def build_filtered_report(report_obj, selected_traits):
+    report = normalize_report(dict(report_obj) if isinstance(report_obj, dict) else {})
+    selected = [t for t in (selected_traits or []) if isinstance(t, dict)]
+    selected = sort_traits_for_display(selected)
+    categories = sorted({t.get("track", t.get("category", "")) for t in selected if t.get("track", t.get("category", ""))})
+    report["traits"] = selected
+    report["summary"] = report.get("summary", {})
+    report["summary"]["num_traits_found"] = len(selected)
+    report["summary"]["categories"] = categories
+    report["summary"]["total_matched_ready"] = len(selected)
+    report["summary"]["major_matched_count"] = sum(1 for t in selected if str(t.get("priority", "")).strip().lower() == "major")
+    report["summary"]["standard_matched_count"] = sum(1 for t in selected if str(t.get("priority", "")).strip().lower() != "major")
+    report["traits_major"] = [t for t in selected if str(t.get("priority", "")).strip().lower() == "major"]
+    report["traits_standard"] = [t for t in selected if str(t.get("priority", "")).strip().lower() != "major"]
+    rag_all = report_obj.get("rag_evidence", {}) if isinstance(report_obj, dict) else {}
+    if isinstance(rag_all, dict):
+        report["rag_evidence"] = {t.get("trait_id", ""): rag_all.get(t.get("trait_id", ""), []) for t in selected if t.get("trait_id", "")}
+    else:
+        report["rag_evidence"] = {}
+    return report
+
+
+def is_dev_mode():
+    env_flag = str(os.environ.get("DEV_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
+    secret_flag = False
+    try:
+        secret_flag = bool(st.secrets.get("DEV_MODE", False))
+    except Exception:
+        secret_flag = False
+    return env_flag or secret_flag
+
+
+@st.cache_data(show_spinner=False)
+def cached_load_study_packs(dir_path: str):
+    return load_study_packs(dir_path)
+
+
+def get_evidence_packets_cached(trait: dict, max_papers: int = 6):
+    t = trait if isinstance(trait, dict) else {}
+    trait_id = str(t.get("trait_id", "")).strip()
+    gene = str(t.get("gene", "")).strip()
+    trait_name = str(t.get("trait_name", t.get("title", ""))).strip()
+    packs = cached_load_study_packs(str(STUDY_PACK_DIR))
+    local = retrieve_evidence(trait_id=trait_id, study_packs=packs, k=max(1, int(max_papers or 6)))
+    papers = []
+    for p in local.get("passages", []) or []:
+        if not isinstance(p, dict):
+            continue
+        citation_id = str(p.get("citation_id", "") or "")
+        pmid = citation_id.replace("PMID:", "") if citation_id.startswith("PMID:") else ""
+        pmcid = citation_id.replace("PMC:", "") if citation_id.startswith("PMC:") else ""
+        doi = citation_id.replace("DOI:", "") if citation_id.startswith("DOI:") else ""
+        papers.append(
+            {
+                "pmid": pmid,
+                "pmcid": pmcid,
+                "doi": doi,
+                "title": str(p.get("title", "") or ""),
+                "year": str(p.get("year", "") or ""),
+                "abstract": str(p.get("quote", "") or ""),
+            }
+        )
+    return {"gene": gene, "trait_name": trait_name, "papers": papers}
+
+
+def attach_rag_evidence_to_report(report: dict, max_papers_per_gene: int = 6):
+    rep = normalize_report(dict(report) if isinstance(report, dict) else {})
+    rag_evidence = {}
+    major_traits = [t for t in rep.get("traits_major", []) if isinstance(t, dict)]
+    for trait in major_traits:
+        q = trait.get("_quality", {})
+        if not isinstance(q, dict) or q.get("label") != "Ready":
+            continue
+        trait_id = str(trait.get("trait_id", "")).strip()
+        if not trait_id:
+            continue
+
+        genes = set()
+        variants = trait.get("variants")
+        if isinstance(variants, list):
+            for v in variants:
+                if not isinstance(v, dict):
+                    continue
+                g = str(v.get("gene", "")).strip()
+                if g:
+                    genes.add(g)
+        g_single = str(trait.get("gene", "")).strip()
+        if g_single:
+            genes.add(g_single)
+
+        packets = []
+        for gene in sorted(genes):
+            trait_for_query = dict(trait)
+            trait_for_query["gene"] = gene
+            packet = get_evidence_packets_cached(trait_for_query, max_papers=max_papers_per_gene)
+            packets.append(packet)
+        rag_evidence[trait_id] = packets
+
+    rep["rag_evidence"] = rag_evidence
+    return rep
+
+
+def attach_polygenic_evidence_scaffold(report: dict, user_variants: list[dict]):
+    """Attach local study-pack PRS + local evidence + trust metadata."""
+    rep = normalize_report(dict(report) if isinstance(report, dict) else {})
+    rep.setdefault("polygenic", {})
+    rep.setdefault("evidence", {})
+    rep.setdefault("trust", {"coverage": 0.0, "confidence": "Low", "citations": []})
+
+    packs = cached_load_study_packs(str(STUDY_PACK_DIR))
+    if not packs:
+        rep["trust"] = {
+            "coverage": 0.0,
+            "confidence": "Low",
+            "citations": [],
+            "notes": "Study packs are missing; polygenic and local RAG scaffold not applied.",
+        }
+        return rep, "Local study packs not found. Continuing with single-SNP report only."
+
+    citations = []
+    seen_citations = set()
+    coverages = []
+
+    for pack in packs:
+        if not isinstance(pack, dict):
+            continue
+        trait_id = str(pack.get("trait_id", "")).strip()
+        if not trait_id:
+            continue
+
+        prs = compute_prs(pack, user_variants or [])
+        rep["polygenic"][trait_id] = prs
+        coverages.append(float(prs.get("coverage", 0.0) or 0.0))
+
+        ev = retrieve_evidence(trait_id=trait_id, study_packs=packs, k=3)
+        rep["evidence"][trait_id] = ev
+        for p in ev.get("passages", []) or []:
+            if not isinstance(p, dict):
+                continue
+            cid = str(p.get("citation_id", "")).strip()
+            if not cid or cid in seen_citations:
+                continue
+            seen_citations.add(cid)
+            citations.append(cid)
+
+    avg_coverage = (sum(coverages) / len(coverages)) if coverages else 0.0
+    if avg_coverage >= 0.6:
+        confidence = "High"
+    elif avg_coverage >= 0.2:
+        confidence = "Medium"
+    else:
+        confidence = "Low"
+
+    rep["trust"] = {
+        "coverage": round(avg_coverage, 4),
+        "confidence": confidence,
+        "citations": citations[:20],
+    }
+    return rep, ""
+
+# Expect the key to be set as OPENROUTER_API_KEY
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = "mistralai/mistral-7b-instruct"
+OPENROUTER_CLIENT = (
+    OpenAI(api_key=OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1")
+    if (OpenAI is not None and OPENROUTER_API_KEY)
+    else None
+)
+
+# Show errors in the UI instead of failing silently
+st.set_option("client.showErrorDetails", True)
+
+def generate_ai_summary(report: dict) -> str:
+    if not OPENROUTER_CLIENT:
+        return {"overview": "", "top_insights": [], "evidence": {}}
+
+    report = normalize_report(report)
+    traits = [t for t in report.get("traits", []) if isinstance(t, dict) and str(t.get("priority", "")).strip().lower() == "major"]
+    rag_evidence = report.get("rag_evidence", {}) if isinstance(report.get("rag_evidence"), dict) else {}
+
+    prompt = f"""
+You are a careful genetics educator.
+
+Rules:
+- Educational only
+- No medical advice
+- No diagnosis
+- No disease risk prediction
+- Use cautious language (may, might, could)
+- Return strict JSON only, no markdown, no extra text.
+- Use Major traits only.
+- Top insights must be 4-7 items when possible.
+- confidence must be one of: High, Medium, Low.
+- If no papers for a trait, include a limitations note saying:
+  "No direct paper match was retrieved"
+
+Return EXACTLY this JSON shape:
+{{
+  "overview": "3-5 short paragraphs, friendly, educational",
+  "top_insights": [
+    {{
+      "trait_id":"...",
+      "title":"...",
+      "explanation":"...",
+      "try_this":[ "...", "..." ],
+      "confidence":"Medium"
+    }}
+  ],
+  "evidence": {{
+    "TRAIT_ID": {{
+      "citations":[ {{"pmid":"...", "title":"...", "year":2022}} ],
+      "limitations":"..."
+    }}
+  }}
+}}
+
+Major matched trait objects (JSON):
+{json.dumps(traits, indent=2)}
+
+Evidence packets by trait_id (JSON):
+{json.dumps(rag_evidence, indent=2)}
+"""
+
+    raw = generate_with_fallback_model(prompt)
+    return parse_ai_summary_json(raw)
+
+
+def parse_ai_summary_json(text: str):
+    def empty_payload():
+        return {"overview": "", "top_insights": [], "evidence": {}}
+
+    raw = (text or "").strip()
+    if not raw:
+        return empty_payload()
+
+    obj = None
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+        if m:
+            try:
+                obj = json.loads(m.group(0))
+            except Exception:
+                obj = None
+    if not isinstance(obj, dict):
+        return empty_payload()
+
+    overview = obj.get("overview", "")
+    if not isinstance(overview, str):
+        overview = str(overview or "")
+    top_insights = obj.get("top_insights", [])
+    evidence = obj.get("evidence", {})
+    if not isinstance(top_insights, list):
+        top_insights = []
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    normalized_insights = []
+    for i in top_insights:
+        if not isinstance(i, dict):
+            continue
+        trait_id = str(i.get("trait_id", "")).strip()
+        title = str(i.get("title", "")).strip()
+        explanation = str(i.get("explanation", "")).strip()
+        try_this = i.get("try_this", [])
+        if not isinstance(try_this, list):
+            try_this = []
+        try_this = [str(x).strip() for x in try_this if str(x).strip()][:3]
+        confidence = str(i.get("confidence", "Medium")).strip().capitalize()
+        if confidence not in {"High", "Medium", "Low"}:
+            confidence = "Medium"
+        normalized_insights.append(
+            {
+                "trait_id": trait_id,
+                "title": title,
+                "explanation": explanation,
+                "try_this": try_this,
+                "confidence": confidence,
+            }
+        )
+
+    normalized_evidence = {}
+    for tid, block in evidence.items():
+        if not isinstance(block, dict):
+            continue
+        citations = block.get("citations", [])
+        if not isinstance(citations, list):
+            citations = []
+        normalized_citations = []
+        for c in citations:
+            if not isinstance(c, dict):
+                continue
+            normalized_citations.append(
+                {
+                    "pmid": str(c.get("pmid", "")).strip(),
+                    "pmcid": str(c.get("pmcid", "")).strip(),
+                    "doi": str(c.get("doi", "")).strip(),
+                    "title": str(c.get("title", "")).strip(),
+                    "year": str(c.get("year", "")).strip(),
+                }
+            )
+        normalized_evidence[str(tid)] = {
+            "citations": normalized_citations,
+            "limitations": str(block.get("limitations", "")).strip(),
+        }
+
+    return {"overview": overview.strip(), "top_insights": normalized_insights, "evidence": normalized_evidence}
+
+
+def insights_to_chat_summary(payload: dict) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    insights = payload.get("top_insights", [])
+    if not isinstance(insights, list) or not insights:
+        return ""
+    lines = []
+    for i in insights:
+        if not isinstance(i, dict):
+            continue
+        title = str(i.get("title", "")).strip()
+        exp = str(i.get("explanation", "")).strip()
+        if title or exp:
+            lines.append(f"- {title}: {exp}".strip(": "))
+    return "\n".join(lines)
+
+
+def generate_with_fallback_model(prompt: str) -> str:
+    """Generate text via OpenRouter using an OpenAI-compatible client."""
+    if not OPENROUTER_CLIENT:
+        return ""
+    response = OPENROUTER_CLIENT.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a careful genetics educator. Educational content only. "
+                    "Do not provide medical advice, diagnosis, or treatment recommendations."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+def is_red_flag_trait(trait: dict) -> bool:
+    if not isinstance(trait, dict):
+        return False
+    flag_level = str(trait.get("flag_level", "")).strip().lower()
+    priority = str(trait.get("priority", "")).strip().lower()
+    effect_level = str(trait.get("effect_level", "")).strip().lower()
+    return (
+        flag_level == "high"
+        or priority == "major"
+        or effect_level in {"elevated", "high"}
+    )
+
+
+def parse_trait_annotation_json(text: str):
+    payload = {"life_impact": "", "red_flag": "", "citations": []}
+    raw = (text or "").strip()
+    if not raw:
+        return payload
+    obj = None
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+        if m:
+            try:
+                obj = json.loads(m.group(0))
+            except Exception:
+                obj = None
+    if not isinstance(obj, dict):
+        return payload
+    payload["life_impact"] = str(obj.get("life_impact", "")).strip()
+    payload["red_flag"] = str(obj.get("red_flag", "")).strip()
+    citations = obj.get("citations", [])
+    if isinstance(citations, list):
+        out = []
+        for c in citations[:3]:
+            if not isinstance(c, dict):
+                continue
+            out.append(
+                {
+                    "pmid": str(c.get("pmid", "")).strip(),
+                    "pmcid": str(c.get("pmcid", "")).strip(),
+                    "doi": str(c.get("doi", "")).strip(),
+                    "title": str(c.get("title", "")).strip(),
+                    "year": str(c.get("year", "")).strip(),
+                }
+            )
+        payload["citations"] = out
+    return payload
+
+
+def extract_citations_from_packets(evidence_packets, max_items: int = 3):
+    citations = []
+    seen = set()
+    for packet in evidence_packets if isinstance(evidence_packets, list) else []:
+        papers = packet.get("papers", []) if isinstance(packet, dict) else []
+        for p in papers:
+            if not isinstance(p, dict):
+                continue
+            pmid = str(p.get("pmid", "")).strip()
+            pmcid = str(p.get("pmcid", "")).strip()
+            doi = str(p.get("doi", "")).strip()
+            key = pmid or pmcid or doi or str(p.get("title", "")).strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            citations.append(
+                {
+                    "pmid": pmid,
+                    "pmcid": pmcid,
+                    "doi": doi,
+                    "title": str(p.get("title", "")).strip(),
+                    "year": str(p.get("year", "")).strip(),
+                }
+            )
+            if len(citations) >= max_items:
+                return citations
+    return citations
+
+
+def generate_trait_annotation(trait: dict, evidence_packets):
+    t = trait if isinstance(trait, dict) else {}
+    citations = extract_citations_from_packets(evidence_packets, max_items=3)
+    default_life = (
+        f"{t.get('trait_name', 'This trait')} may be associated with variation in response patterns, "
+        "but observed effects can vary across people and contexts."
+    )
+    default_red = ""
+    if is_red_flag_trait(t):
+        default_red = (
+            "This is marked as a red-flag trait because the current signal may indicate a stronger-than-average effect."
+        )
+    if not citations and "Evidence retrieval pending." not in default_life:
+        default_life += " Evidence retrieval pending."
+
+    if not OPENROUTER_CLIENT:
+        return {"life_impact": default_life, "red_flag": default_red, "citations": citations}
+
+    evidence_snippets = []
+    for c in citations:
+        ident = c.get("pmid") or c.get("pmcid") or c.get("doi") or ""
+        evidence_snippets.append(
+            {
+                "id": ident,
+                "title": c.get("title", ""),
+                "year": c.get("year", ""),
+            }
+        )
+
+    prompt = f"""
+Trait:
+{json.dumps(t, indent=2)}
+
+Evidence snippets:
+{json.dumps(evidence_snippets, indent=2)}
+
+Return JSON ONLY with:
+{{
+ "life_impact": "1–2 sentences: how this might show up in everyday life (plain language).",
+ "red_flag": "0–1 sentence ONLY if this trait is flagged High/Major/Elevated; otherwise empty string.",
+ "citations": [
+   {{"pmid":"", "pmcid":"", "doi":"", "title":"", "year":""}}
+ ]
+}}
+
+Rules:
+- No bullet lists.
+- No advice or what to do.
+- Educational only. No medical advice. No diagnosis. No treatment. No lifestyle fixes.
+- Use cautious language (may/might/can vary).
+- Do NOT restate the provided explanation verbatim; rewrite clearly for a general audience.
+- If no evidence, citations = [] and include: "Evidence retrieval pending."
+"""
+    raw = generate_with_fallback_model(prompt)
+    parsed = parse_trait_annotation_json(raw)
+    if not parsed.get("life_impact"):
+        parsed["life_impact"] = default_life
+    if is_red_flag_trait(t) and not parsed.get("red_flag"):
+        parsed["red_flag"] = default_red
+    if not is_red_flag_trait(t):
+        parsed["red_flag"] = ""
+    parsed_citations = parsed.get("citations", [])
+    if not isinstance(parsed_citations, list) or not parsed_citations:
+        parsed["citations"] = citations
+    else:
+        parsed["citations"] = parsed_citations[:3]
+    if not parsed["citations"] and "Evidence retrieval pending." not in parsed["life_impact"]:
+        parsed["life_impact"] = f"{parsed['life_impact']} Evidence retrieval pending."
+    return parsed
+
+
+def build_local_lifestyle_plan(report: dict) -> str:
+    report = normalize_report(report)
+    categories = report.get("summary", {}).get("categories", [])
+    cat_line = ", ".join(categories) if categories else "your matched traits"
+    return (
+        "Big picture: Your profile suggests useful lifestyle experiments around "
+        f"{cat_line}. This is educational only, not medical advice.\n\n"
+        "Sleep: Keep a consistent sleep-wake window, reduce late caffeine, and track how rested you feel.\n\n"
+        "Focus and learning: Use short deep-work blocks (25-45 min), then brief breaks, and note which timing works best.\n\n"
+        "Movement and recovery: Pair moderate activity with regular recovery days; adjust intensity based on sleep and stress.\n\n"
+        "Caffeine and stimulants: Start with smaller doses earlier in the day and avoid late-afternoon intake.\n\n"
+        "Everyday habits: Change one variable at a time for 2-3 weeks and keep simple notes so you can spot patterns."
+    )
+
+
+def build_local_chat_reply(user_input: str, report: dict) -> str:
+    report = normalize_report(report)
+    n = report.get("summary", {}).get("num_traits_found", 0)
+    categories = report.get("summary", {}).get("categories", [])
+    cats = ", ".join(categories) if categories else "the available traits"
+    return (
+        f"I could not reach an AI provider right now, so here is a local guidance response. "
+        f"Your report includes {n} matched traits across {cats}. "
+        f"For your question \"{user_input}\", try one small, trackable habit change this week, "
+        f"monitor sleep/energy/focus daily, and adjust gradually. This is educational only, not medical advice."
+    )
 
 # ---------- Page config ----------
 st.set_page_config(
-    page_title="GenAI Engine",
+    page_title="VivaGene",
     page_icon="🧬",
     layout="wide",
 )
@@ -891,8 +1498,8 @@ transition: color 0.16s ease, border-bottom-color 0.16s ease,
             """
             <div class="nav-logo-container">
                 <div>
-                    <div class="logo-title">GENAI ENGINE</div>
-                    <div class="logo-sub">AI powered genomic insight</div>
+                    <div class="logo-title">VIVAGENE</div>
+                    <div class="logo-sub">Genomics, explained with evidence.</div>
                 </div>
             </div>
             """,
@@ -901,10 +1508,12 @@ transition: color 0.16s ease, border-bottom-color 0.16s ease,
 
     with col_right:
         st.markdown("<div class='nav-button-container'>", unsafe_allow_html=True)
-        nav_cols = st.columns(7)
-
-        pages = ["Home", "Upload & Report", "Lifestyle Chatbot", "Trait Explorer", "Trait Science", "About", "Contact"]
-        labels = ["Home", "Upload", "Lifestyle chatbot", "Trait explorer", "Trait science", "About", "Contact"]
+        pages = ["Home", "Upload & Report", "Lifestyle Q&A", "Trait Explorer", "Trait Science", "About", "Contact"]
+        labels = ["Home", "Upload", "Lifestyle Q&A", "Trait explorer", "Trait science", "About", "Contact"]
+        if str(os.environ.get("SHOW_VALIDATION", "0")).strip() == "1":
+            pages.append("Validation (Dev)")
+            labels.append("Validation (Dev)")
+        nav_cols = st.columns(len(labels))
 
         for i, p in enumerate(pages):
             if nav_cols[i].button(labels[i], key=f"nav_btn_{i}"):
@@ -938,7 +1547,7 @@ def newsletter_block(location_text: str):
         )
         st.markdown(
             "<div class='newsletter-modal'>"
-            "<div class='newsletter-title'>Join the GenAI Engine early access list</div>"
+            "<div class='newsletter-title'>Join the VivaGene early access list</div>"
             "<div class='newsletter-sub'>Get updates as the platform evolves and, in a full launch, "
             "receive your reports securely by email.</div>",
             unsafe_allow_html=True,
@@ -958,17 +1567,188 @@ def newsletter_block(location_text: str):
 
 
 # ---------- Trait DB helper ----------
-def load_trait_rows_from_csv(path: str):
-    """Load the raw trait database as a list of row dicts for exploration."""
+def load_trait_rows(path_csv: str, path_json: str):
+    """Load trait rows for explorer, preferring nested JSON schema."""
     rows = []
+
+    # Preferred: data/traits.json (nested -> flatten for table/search/filter).
     try:
-        with open(path, newline="", encoding="utf-8") as f:
+        with open(path_json, encoding="utf-8") as f:
+            traits = json.load(f)
+        if isinstance(traits, list):
+            for trait in traits:
+                if not isinstance(trait, dict):
+                    continue
+                quality = trait.get("_quality")
+                if not isinstance(quality, dict):
+                    quality = compute_trait_completeness(trait)
+                quality_label = quality.get("label", "Placeholder")
+                completeness_score = int(quality.get("score", 0))
+                missing_fields_count = len(quality.get("missing", [])) if isinstance(quality.get("missing"), list) else 0
+                priority = trait.get("priority", "Standard")
+                flag_level = trait.get("flag_level", "Low")
+                user_visibility_default = bool(trait.get("user_visibility_default", False))
+                trait_name = trait.get("trait_name", trait.get("title", ""))
+                variants = trait.get("variants", []) or []
+                if not variants:
+                    rows.append(
+                        {
+                            "trait_id": trait.get("trait_id", ""),
+                            "title": trait_name,
+                            "trait_name": trait_name,
+                            "track": trait.get("track", trait.get("category", "")),
+                            "subcategory": trait.get("subcategory", "General"),
+                            "rsid": "",
+                            "gene": "",
+                            "genotype": "",
+                            "effect_label": "",
+                            "effect_level": "",
+                            "explanation": "",
+                            "evidence_strength": "",
+                            "priority": priority,
+                            "flag_level": flag_level,
+                            "user_visibility_default": user_visibility_default,
+                            "quality_label": quality_label,
+                            "completeness_score": completeness_score,
+                            "missing_fields_count": missing_fields_count,
+                        }
+                    )
+                    continue
+                for var in variants:
+                    if not isinstance(var, dict):
+                        continue
+                    genotypes = var.get("genotype_effects", {}) or var.get("genotypes", {}) or {}
+                    if not genotypes:
+                        rows.append(
+                            {
+                                "trait_id": trait.get("trait_id", ""),
+                                "title": trait_name,
+                                "trait_name": trait_name,
+                                "track": trait.get("track", trait.get("category", "")),
+                                "subcategory": trait.get("subcategory", "General"),
+                                "rsid": var.get("rsid", ""),
+                                "gene": var.get("gene", ""),
+                                "genotype": "",
+                                "effect_label": "",
+                                "effect_level": "",
+                                "explanation": "",
+                                "evidence_strength": var.get("evidence_strength", ""),
+                                "priority": priority,
+                                "flag_level": flag_level,
+                                "user_visibility_default": user_visibility_default,
+                                "quality_label": quality_label,
+                                "completeness_score": completeness_score,
+                                "missing_fields_count": missing_fields_count,
+                            }
+                        )
+                        continue
+                    for gt, gx in genotypes.items():
+                        if not isinstance(gx, dict):
+                            continue
+                        rows.append(
+                            {
+                                "trait_id": trait.get("trait_id", ""),
+                                "title": trait_name,
+                                "trait_name": trait_name,
+                                "track": trait.get("track", trait.get("category", "")),
+                                "subcategory": trait.get("subcategory", "General"),
+                                "rsid": var.get("rsid", ""),
+                                "gene": var.get("gene", ""),
+                                "genotype": str(gt).upper(),
+                                "effect_label": gx.get("effect_label", ""),
+                                "effect_level": gx.get("effect_level", ""),
+                                "explanation": gx.get("explanation", ""),
+                                "evidence_strength": var.get("evidence_strength", ""),
+                                "priority": priority,
+                                "flag_level": flag_level,
+                                "user_visibility_default": user_visibility_default,
+                                "quality_label": quality_label,
+                                "completeness_score": completeness_score,
+                                "missing_fields_count": missing_fields_count,
+                            }
+                        )
+            if rows:
+                return rows
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        st.error(f"Could not load trait database from {path_json}: {e}")
+
+    # Fallback: legacy CSV
+    try:
+        with open(path_csv, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
+                row = dict(row)
+                row.setdefault("title", row.get("trait_name", ""))
+                row.setdefault("track", row.get("category", ""))
+                row.setdefault("subcategory", "General")
+                row.setdefault("priority", "Standard")
+                row.setdefault("flag_level", "Low")
+                row.setdefault("user_visibility_default", False)
+                quality = compute_trait_completeness(
+                    {
+                        "trait_name": row.get("title", ""),
+                        "user_question": "",
+                        "what_it_means": "",
+                        "why_it_matters": "",
+                        "limitations": "",
+                        "tags": [],
+                        "variants": [row] if row.get("rsid") else [],
+                        "research_query_hint": "",
+                        "citation_seeds": [],
+                        "mechanism_keywords": [],
+                    }
+                )
+                row["quality_label"] = quality.get("label", "Placeholder")
+                row["completeness_score"] = int(quality.get("score", 0))
+                row["missing_fields_count"] = len(quality.get("missing", [])) if isinstance(quality.get("missing"), list) else 0
                 rows.append(row)
     except Exception as e:
-        st.error(f"Could not load trait database from {path}: {e}")
+        st.error(f"Could not load trait database from {path_csv}: {e}")
     return rows
+
+
+def get_trait_quality_counts(path_json: str):
+    """Return total and label counts using precomputed trait _quality metadata."""
+    counts = {"total": 0, "Ready": 0, "Draft": 0, "Placeholder": 0, "no_variants": 0}
+    try:
+        traits = load_traits_catalog(path_json)
+        counts["total"] = len(traits)
+        for t in traits:
+            q = t.get("_quality", {})
+            label = q.get("label", "Placeholder")
+            if label in counts:
+                counts[label] += 1
+            if not trait_has_variants(t):
+                counts["no_variants"] += 1
+    except Exception:
+        pass
+    return counts
+
+
+def get_trait_db_stats(path_json: str):
+    stats = {"traits": 0, "variants": 0, "ready": 0, "draft": 0, "placeholder": 0}
+    try:
+        traits = load_traits_catalog(path_json)
+        stats["traits"] = len(traits)
+        for t in traits:
+            if not isinstance(t, dict):
+                continue
+            variants = t.get("variants", [])
+            if isinstance(variants, list):
+                stats["variants"] += len([v for v in variants if isinstance(v, dict)])
+            q = t.get("_quality", {})
+            label = q.get("label", "Placeholder") if isinstance(q, dict) else "Placeholder"
+            if label == "Ready":
+                stats["ready"] += 1
+            elif label == "Draft":
+                stats["draft"] += 1
+            else:
+                stats["placeholder"] += 1
+    except Exception:
+        pass
+    return stats
 
 # ---------- HOME ----------
 if page == "Home":
@@ -977,25 +1757,21 @@ if page == "Home":
         <div class="hero-band">
           <div class="hero-grid">
             <div>
-              <div class="hero-chip">GenAI Engine · Prototype</div>
+              <div class="hero-chip">Evidence-first Genomics</div>
               <div class="hero-title">
-                Genetics is shaping the future.<br/>
-                Understand your genome with <span>AI powered insight.</span>
+                Understand your genetics with <span>clarity.</span>
               </div>
               <div class="hero-sub">
-                The way your body responds to sleep, stress, food, exercise, and focus is influenced in part by your DNA.
-                As sequencing becomes more common, genetics is becoming a real force in healthcare and everyday life.
-                GenAI Engine exists to make those signals easier to understand without treating DNA as destiny. The goal
-                is to help you see how genetics may interact with your lifestyle so you can think about realistic ways
-                to support your long term health and performance.
+                VivaGene translates raw genotype files into structured trait signals and plain-language explanations grounded in citations.
+                It is designed for careful educational use and clear communication of confidence and coverage.
               </div>
               <div class="hero-note">
-                This prototype runs locally, uses a small curated trait panel, and is meant for education and self reflection,
-                not for diagnosis or treatment.
+                VivaGene currently supports a curated trait panel across Nutrition, Neurobehavior, and Fitness.
+                Every explanation is linked to evidence and shown with confidence + coverage. Genes are not destiny.
               </div>
             </div>
             <div class="hero-dna-card">
-              <div class="hero-dna-title">The G Helix engine.</div>
+              <div class="hero-dna-title">Evidence-first Genomics</div>
               <div class="hero-dna-sub">
                 A lightweight variant interpreter feeds a language model that explains patterns
                 in clear language while keeping the underlying science visible.
@@ -1019,18 +1795,18 @@ if page == "Home":
     # Primary CTAs under hero
     cta_col1, cta_col2 = st.columns([0.4, 0.4])
     with cta_col1:
-        if st.button("Generate a demo report", key="hero_demo_report"):
+        if st.button("Generate your report", key="hero_start_report"):
             st.session_state.active_page = "Upload & Report"
     with cta_col2:
-        if st.button("Try the lifestyle chatbot", key="hero_chatbot"):
-            st.session_state.active_page = "Lifestyle Chatbot"
+        if st.button("Try Lifestyle Q&A", key="hero_chatbot"):
+            st.session_state.active_page = "Lifestyle Q&A"
 
-    # Why GenAI Engine exists
+    # Why VivaGene exists
     st.markdown('<div class="home-section dark-section">', unsafe_allow_html=True)
     col_left, col_right = st.columns([1.4, 1.0])
 
     with col_left:
-        st.markdown('<div class="section-title">Why GenAI Engine exists</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Why VivaGene exists</div>', unsafe_allow_html=True)
         st.markdown(
             """
             - Turn raw SNP data into something a person can actually read.  
@@ -1044,9 +1820,9 @@ if page == "Home":
         newsletter_block("home")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Why choose GenAI Engine
+    # Why choose VivaGene
     st.markdown('<div class="home-section dark-section">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Why choose GenAI Engine?</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Why choose VivaGene?</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-sub">A focused, lifestyle aware, education first platform instead of a generic consumer report.</div>',
         unsafe_allow_html=True,
@@ -1058,7 +1834,7 @@ if page == "Home":
             <div class="feature-label">Founder story</div>
             <div class="feature-title">Designed by a future AI geneticist</div>
             <div class="feature-body">
-              GenAI Engine is led by Anjali, a high school student who plans to work at the intersection of genetics,
+              VivaGene is led by Anjali, a high school student who plans to work at the intersection of genetics,
               AI, and clinical decision making. The project reflects real experience in rare disease research and
               clinical volunteering, translated into a tool that explains DNA in a calm and structured way.
             </div>
@@ -1096,7 +1872,7 @@ if page == "Home":
             <div class="how-step">
               <div class="how-step-number">01</div>
               <div class="how-step-title">Upload a raw DNA file</div>
-              <div>Use a 23andMe style text export or start with the built in demo file to see the flow.</div>
+              <div>Use a 23andMe style text export or start with the supported file format to see the flow.</div>
             </div>
             <div class="how-step">
               <div class="how-step-number">02</div>
@@ -1105,8 +1881,8 @@ if page == "Home":
             </div>
             <div class="how-step">
               <div class="how-step-number">03</div>
-              <div class="how-step-title">Generate an AI overview</div>
-              <div>The language model converts structured traits into a human readable summary that focuses on education and realistic possibilities.</div>
+              <div class="how-step-title">Generate an evidence overview</div>
+              <div>The language model converts structured traits into a human-readable summary while keeping evidence boundaries explicit.</div>
             </div>
             <div class="how-step">
               <div class="how-step-number">04</div>
@@ -1120,10 +1896,23 @@ if page == "Home":
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="home-section">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">How VivaGene stays trustworthy</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        - Coverage shown (% variants found)  
+        - Confidence shown (High/Medium/Low)  
+        - Citations displayed  
+        - Refuses unsupported claims  
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
     # Secondary CTA near How it works
     spacer_left, cta_mid, spacer_right = st.columns([0.35, 0.3, 0.35])
     with cta_mid:
-        if st.button("Start with a demo report", key="how_demo_report"):
+        if st.button("Start your report", key="how_start_report"):
             st.session_state.active_page = "Upload & Report"
 
     # Founder profile / Who this is for / Roadmap
@@ -1142,7 +1931,7 @@ if page == "Home":
                 My background includes Johns Hopkins affiliated research focused on rare disease biology, internships that explore
                 both medicine and research, and formal laboratory certifications that trained me in careful, real-world lab practice.
                 I am especially interested in genetic counseling and neuro oncology, and in how AI can support thoughtful,
-                evidence-aware conversations about risk and lifestyle. GenAI Engine is my way of connecting everything I am
+                evidence-aware conversations about risk and lifestyle. VivaGene is my way of connecting everything I am
                 learning into a single pipeline: from raw genomic data, to structured trait interpretation, to clear explanations
                 that help people understand their biology in a calm and responsible way.
               </div>
@@ -1163,7 +1952,7 @@ if page == "Home":
               </div>
               <div class="who-card">
                 <div class="who-title">Students in biology or pre medicine</div>
-                <div>You would like a sandbox where you can practice reading trait reports, understand limitations,
+                <div>You would like a learning environment where you can practice reading trait reports, understand limitations,
                 and think about how you would communicate genomics in the future.</div>
               </div>
               <div class="who-card">
@@ -1182,11 +1971,11 @@ if page == "Home":
             """
             <div class="roadmap-card">
               <div class="roadmap-label">Next steps</div>
-              <div class="roadmap-title">Beyond this prototype</div>
+              <div class="roadmap-title">Beyond this research project</div>
               <div>
                 · Expanding the trait panel with additional genotypes and pathways that relate to lifestyle. <br/>
-                · Account creation so users can save reports under a GenAI Engine login. <br/>
-                · Email delivery of reports from a dedicated GenAI Engine address. <br/>
+                · Account creation so users can save reports under a VivaGene login. <br/>
+                · Email delivery of reports from a dedicated VivaGene address. <br/>
                 · A cautious chatbot that lets users ask follow up questions about their traits and habits, framed as education
                   and ideas rather than medical advice.
               </div>
@@ -1213,9 +2002,9 @@ if page == "Home":
     st.markdown('<div class="section-title">Safety, privacy, and limitations</div>', unsafe_allow_html=True)
     st.markdown(
         """
-        - GenAI Engine is an educational prototype. It does not diagnose, treat, or predict disease.  
+        - VivaGene is an educational research project. It does not diagnose, treat, or predict disease.  
         - This tool focuses on a small set of lifestyle-related traits, not your full genomic risk.  
-        - In this local version, files are processed for the session and not saved to a user database.  
+        - In this current deployment, files are processed for the session and not saved to a user database.  
         - Genetics is only one part of the picture alongside sleep, nutrition, stress, and environment.  
         - For any medical questions or concerns, always speak with a licensed clinician or genetic counselor.  
         """,
@@ -1232,7 +2021,7 @@ if page == "Home":
         Plain text genotype files with columns like rsid, chromosome, position, and genotype. A 23andMe-style export is a common example.  
 
         **Will this tell me if I have a disease?**  
-        No. GenAI Engine only looks at a small set of lifestyle-oriented traits and does not provide medical risk predictions.  
+        No. VivaGene only looks at a small set of lifestyle-oriented traits and does not provide medical risk predictions.  
 
         **Is this a replacement for my doctor or genetic counselor?**  
         No. This is a learning tool. It can help you think of questions, but it cannot replace professional advice.  
@@ -1245,12 +2034,31 @@ elif page == "Upload & Report":
     st.markdown('<div class="section-title">Generate a personal trait report</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-sub">'
-        'Upload a compatible raw DNA text file. GenAI Engine will interpret a subset of variants, build a trait '
+        'Upload a compatible raw DNA text file. VivaGene will interpret a subset of variants, build a trait '
         'profile, and ask an AI model to generate a plain language overview with a focus on traits that may interact with lifestyle.</div>',
         unsafe_allow_html=True,
     )
+    with st.expander("AI, chatbot, and data policy"):
+        st.markdown(
+            """
+            - Educational insights only; not medical advice  
+            - No diagnosis or disease prediction  
+            - Explanations are bounded by available evidence and confidence  
+            - Citations are shown when available  
+            - Unsupported claims are refused intentionally  
+            """
+        )
 
     newsletter_block("upload")
+
+    if is_dev_mode():
+        stats = get_trait_db_stats(TRAITS_JSON_PATH)
+        st.markdown("#### DEV CHECK")
+        st.caption(
+            "Traits loaded: "
+            f"{stats.get('traits', 0)} | Variants loaded: {stats.get('variants', 0)} | "
+            f"Ready: {stats.get('ready', 0)} | Draft: {stats.get('draft', 0)} | Placeholder: {stats.get('placeholder', 0)}"
+        )
 
     col1, col2 = st.columns([1.2, 0.9])
 
@@ -1259,11 +2067,8 @@ elif page == "Upload & Report":
         uploaded = st.file_uploader("Raw genotype file (.txt, 23andMe style)", type=["txt"])
 
         st.caption(
-            "The file should contain at least rsid and genotype columns. "
-            "For testing, you can use the built in demo file."
+            "The file should contain at least rsid and genotype columns."
         )
-
-        use_demo = st.checkbox("Use demo file from this project (test_genotype.txt)", value=not bool(uploaded))
 
         st.markdown("#### Where should results go?")
         email_for_result = st.text_input(
@@ -1271,60 +2076,167 @@ elif page == "Upload & Report":
             placeholder="you@example.com",
         )
 
+        categories_selected = st.multiselect(
+            "Trait categories",
+            options=["Neurobehavior", "Nutrition", "Fitness", "Liver"],
+            default=["Neurobehavior", "Nutrition", "Fitness"],
+        )
+        include_optional_liver = st.checkbox("Include optional liver traits", value=False)
+        red_flag_only = st.checkbox("Show red-flag traits only", value=True)
+
         generate = st.button("Run analysis")
 
         if generate:
-            trait_lookup = load_trait_database(TRAIT_DB_PATH)
+            if not uploaded:
+                st.warning("Please upload a raw genotype .txt file first.")
+                st.stop()
 
-            if uploaded and not use_demo:
-                temp_path = "uploaded_genome.txt"
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded.getvalue())
-                genotype_path = temp_path
-            else:
-                genotype_path = "test_genotype.txt"
+            temp_path = BASE_DIR / "uploaded_genome.txt"
+            with open(temp_path, "wb") as f:
+                f.write(uploaded.getvalue())
+            genotype_path = str(temp_path)
 
             try:
-                variants = parse_genotype_file(genotype_path)
-                matched_traits = match_traits(trait_lookup, variants)
-                report = build_report_object(matched_traits)
+                report = build_prs_report_from_upload(
+                    genotype_path=genotype_path,
+                    categories_selected=categories_selected,
+                    include_optional_liver=include_optional_liver,
+                    red_flag_only=red_flag_only,
+                )
+                report = normalize_report(report)
+                if not isinstance(report, dict):
+                    raise ValueError("Report generation failed: expected a dict report object.")
+                report = attach_rag_evidence_to_report(report)
 
                 # Save for chatbot
                 st.session_state.last_report = report
 
-                if not matched_traits:
+                if not report.get("traits"):
                     st.warning("No traits were matched. Check that the file uses the expected rsIDs and genotypes.")
                 else:
-                    with st.spinner("Asking the model to summarize your traits..."):
-                        ai_summary = generate_ai_summary(report)
+                    major_traits = sort_traits_for_display(report.get("traits_major", []))
+                    selected_traits = sort_traits_for_display(report.get("traits", []))
+                    filtered_report = build_filtered_report(report, selected_traits)
+                    major_only_report = build_filtered_report(report, major_traits if major_traits else selected_traits)
 
-                    st.session_state.last_ai_summary = ai_summary
+                    enriched_traits = [dict(t) for t in selected_traits if isinstance(t, dict)]
 
-                    st.markdown("### AI overview")
-                    if ai_summary:
-                        st.write(ai_summary)
-                    else:
-                        st.write(
-                            "The AI overview could not be generated, but the structured trait report is still available below."
+                    filtered_report = build_filtered_report(report, enriched_traits)
+
+                    trust_summary = report.get("trust_summary", {}) if isinstance(report.get("trust_summary", {}), dict) else {}
+                    if int(trust_summary.get("traits_refused", 0) or 0) > 0:
+                        st.warning(
+                            "Some traits could not be explained because the evidence corpus does not yet contain sufficient supporting snippets. This is intentional to prevent unsupported claims."
                         )
 
-                    text_report = generate_text_report(report)
+                    summary_lines = []
+                    for t in enriched_traits:
+                        if not isinstance(t, dict):
+                            continue
+                        title = str(t.get("trait_name", "")).strip()
+                        life = str(t.get("explanation", "")).strip()
+                        if title and life:
+                            summary_lines.append(f"- {title}: {life}")
+                    st.session_state.last_ai_summary = "\n".join(summary_lines[:8])
+
+                    cats = report.get("summary", {}).get("categories", []) if isinstance(report.get("summary", {}), dict) else []
+                    n_traits = int(report.get("summary", {}).get("num_traits_found", len(enriched_traits)) or len(enriched_traits))
+                    cov_vals = [float(t.get("coverage", 0.0) or 0.0) for t in enriched_traits if isinstance(t, dict) and isinstance(t.get("coverage", None), (int, float))]
+                    cov_txt = f"{(sum(cov_vals) / len(cov_vals)) * 100:.0f}%" if cov_vals else "—"
+                    st.markdown("### Your VivaGene Trait Summary")
+                    st.caption(
+                        f"Categories: {', '.join(cats) if cats else '—'} · Traits found: {n_traits} · Coverage: {cov_txt}"
+                    )
+
+                    st.markdown("### Evidence-based overview")
+                    st.caption("This overview is educational. It does not diagnose disease or replace medical care.")
+
+                    st.markdown("### Trait cards")
+                    traits_by_category = {}
+                    for t in enriched_traits:
+                        cat = t.get("category", t.get("track", "General"))
+                        traits_by_category.setdefault(cat, []).append(t)
+
+                    for category in sorted(traits_by_category.keys()):
+                        st.markdown(f"#### {category}")
+                        for trait in traits_by_category.get(category, []):
+                            with st.container():
+                                trait_name = trait.get("trait_name", trait.get("trait_id", "Trait"))
+                                gene = trait.get("gene", "")
+                                rsid = trait.get("rsid", "")
+                                genotype = trait.get("user_genotype", "")
+                                effect_label = trait.get("effect_label", "")
+                                effect_level = trait.get("effect_level", "")
+                                evidence_strength = trait.get("evidence_strength", "")
+                                life_impact = trait.get("explanation", "") or "Insufficient evidence in the local corpus to explain this trait yet."
+                                citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
+                                trust = trait.get("trust", {}) if isinstance(trait.get("trust", {}), dict) else {}
+
+                                st.markdown(f"**{trait_name}**")
+                                st.caption(f"Category: {category}")
+                                st.caption(f"{gene} · {rsid} · Genotype {genotype}")
+                                st.markdown(
+                                    f"Effect: **{effect_label or 'Observed variant'}** "
+                                    f"`{str(effect_level or 'Unknown').upper()}`"
+                                )
+                                st.write(life_impact)
+                                st.caption(f"Evidence level: {evidence_strength or 'Emerging'}")
+                                if trust:
+                                    cov = trust.get("coverage", trait.get("coverage", None))
+                                    cov_txt = f"{float(cov) * 100:.0f}%" if isinstance(cov, (int, float)) else "n/a"
+                                    st.caption(
+                                        f"Trust Panel · Bucket: {trust.get('bucket', effect_level)} · "
+                                        f"Confidence: {trust.get('confidence', trait.get('confidence', 'Low'))} · "
+                                        f"Coverage: {cov_txt} · Evidence quality: {trust.get('evidence_quality', 'Low')}"
+                                    )
+                                    bias_note = str(trust.get("bias_note", "")).strip()
+                                    if bias_note:
+                                        st.caption(f"Bias note: {bias_note}")
+                                with st.expander("Evidence & citations"):
+                                    if citations:
+                                        st.markdown("Sources:")
+                                        for c in citations[:5]:
+                                            if isinstance(c, dict):
+                                                title_c = str(c.get("title", "")).strip() or str(c.get("source", "")).strip() or "Source"
+                                                year_c = str(c.get("year", "")).strip()
+                                                source_c = str(c.get("journal", "")).strip() or str(c.get("source", "")).strip()
+                                                if not source_c:
+                                                    url_c = str(c.get("url", "")).strip()
+                                                    if url_c:
+                                                        source_c = url_c.split("/")[2] if "://" in url_c and len(url_c.split("/")) > 2 else url_c
+                                                year_bit = f" ({year_c})" if year_c else ""
+                                                tail = f" — {source_c}" if source_c else ""
+                                                st.markdown(f"- {title_c}{year_bit}{tail}")
+                                            else:
+                                                text_c = str(c).strip()
+                                                if "://" in text_c:
+                                                    parts = text_c.split("/")
+                                                    domain = parts[2] if len(parts) > 2 else text_c
+                                                    st.markdown(f"- {domain}")
+                                                else:
+                                                    st.markdown(f"- {text_c}")
+                                    else:
+                                        st.write("No paper retrieved for this trait yet.")
+
+                    text_report = generate_text_report(filtered_report)
 
                     with st.expander("View technical text summary"):
                         st.text(text_report)
 
                     st.markdown("### Detailed trait report")
-                    html_report = generate_html_report(report, ai_summary=ai_summary)
+                    html_report = generate_html_report(filtered_report, ai_summary=None)
                     st.components.v1.html(html_report, height=850, scrolling=True)
 
                     if email_for_result.strip():
                         st.info(
                             f"In a future deployed version, this report could also be sent securely to {email_for_result.strip()} "
-                            "from a GenAI Engine email address."
+                            "from a VivaGene email address."
                         )
 
             except Exception as e:
                 st.error(f"Something went wrong while generating the report: {e}")
+                with st.expander("Debug traceback"):
+                    st.code(traceback.format_exc(), language="text")
 
     with col2:
         st.markdown("#### What your report looks like")
@@ -1332,14 +2244,14 @@ elif page == "Upload & Report":
             """
             You will receive:
             
-            - A plain-language AI overview of your matched traits  
+            - An evidence-based overview of your matched traits  
             - Individual trait cards showing rsIDs, genes, and genotype  
             - Short explanations of what each trait may mean in everyday life  
             - A scannable HTML layout that you can revisit later  
             """
         )
         st.markdown("---")
-        st.markdown("#### What GenAI Engine does")
+        st.markdown("#### What VivaGene does")
         st.markdown(
             """
             - Parses a raw genotype file line by line  
@@ -1350,7 +2262,7 @@ elif page == "Upload & Report":
             """
         )
         st.markdown("---")
-        st.markdown("#### What GenAI Engine does not do")
+        st.markdown("#### What VivaGene does not do")
         st.markdown(
             """
             - It does not diagnose conditions  
@@ -1363,20 +2275,28 @@ elif page == "Upload & Report":
         )
 
 # ---------- LIFESTYLE CHATBOT ----------
-elif page == "Lifestyle Chatbot":
-    st.markdown('<div class="section-title">Lifestyle chatbot</div>', unsafe_allow_html=True)
+elif page == "Lifestyle Q&A":
+    st.markdown('<div class="section-title">Lifestyle Q&A</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-sub">Ask questions about your trait report, habits, and what you might want to pay attention to. '
         'The chatbot is designed for education and lifestyle ideas, not for medical advice.</div>',
         unsafe_allow_html=True,
     )
 
-    st.warning(
-        "This chatbot can discuss habits, routines, and ways to think about your traits, but it cannot provide medical advice, "
-        "diagnose conditions, or tell you what to do with medications. Always talk with a healthcare professional for medical decisions."
+    st.markdown("#### Chatbot policy")
+    st.markdown(
+        """
+        - Educational and informational only  
+        - No diagnosis or disease prediction  
+        - No medication or treatment guidance  
+        - If you mention symptoms, the chatbot will advise professional care  
+        - Uses cautious language  
+        - When available, citations are shown and the bot refuses unsupported claims  
+        """
     )
+    ack = st.checkbox("I understand this is not medical advice", value=False, key="chatbot_policy_ack")
 
-    st.markdown("#### Lifestyle overview plan (beta)")
+    st.markdown("#### Lifestyle overview plan")
 
     # Show previously generated plan if available
     existing_plan = st.session_state.get("lifestyle_plan")
@@ -1388,10 +2308,13 @@ elif page == "Lifestyle Chatbot":
         "This plan is educational only. It suggests gentle habit ideas based on your traits and should not be treated as medical guidance."
     )
 
-    generate_plan_clicked = st.button("Generate / refresh my lifestyle plan")
+    generate_plan_clicked = st.button("Generate / refresh my lifestyle plan", disabled=not ack)
 
     report = st.session_state.get("last_report")
     ai_summary = st.session_state.get("last_ai_summary")
+
+    if not ack:
+        st.info("Please acknowledge to continue.")
 
     if report is None:
         st.info("Generate a report on the Upload page first so the chatbot has context about your traits.")
@@ -1408,15 +2331,15 @@ elif page == "Lifestyle Chatbot":
             )
 
             try:
-                plan_resp = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": lifestyle_system},
-                        {"role": "user", "content": lifestyle_context},
-                    ],
-                    temperature=0.6,
-                )
-                lifestyle_plan = plan_resp.choices[0].message.content.strip()
+                prompt = f"""
+{lifestyle_system}
+
+Context:
+{lifestyle_context}
+"""
+                lifestyle_plan = generate_with_fallback_model(prompt)
+                if not lifestyle_plan.strip():
+                    lifestyle_plan = build_local_lifestyle_plan(report)
                 st.session_state["lifestyle_plan"] = lifestyle_plan
 
                 with st.expander("View your current lifestyle plan", expanded=True):
@@ -1432,7 +2355,7 @@ elif page == "Lifestyle Chatbot":
             with st.chat_message(role):
                 st.markdown(content)
 
-        user_input = st.chat_input("Ask a question about your traits or lifestyle")
+        user_input = st.chat_input("Ask a question about your traits or lifestyle", disabled=not ack)
         if user_input:
             st.session_state.chat_history.append(("user", user_input))
             with st.chat_message("user"):
@@ -1451,16 +2374,18 @@ elif page == "Lifestyle Chatbot":
 
             with st.chat_message("assistant"):
                 try:
-                    resp = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": context_snippet},
-                            {"role": "user", "content": user_input},
-                        ],
-                        temperature=0.7,
-                    )
-                    reply = resp.choices[0].message.content.strip()
+                    prompt = f"""
+{system_prompt}
+
+Context:
+{context_snippet}
+
+User question:
+{user_input}
+"""
+                    reply = generate_with_fallback_model(prompt)
+                    if not reply.strip():
+                        reply = build_local_chat_reply(user_input, report)
                 except Exception as e:
                     reply = f"There was an error calling the model: {e}"
 
@@ -1476,32 +2401,49 @@ elif page == "Trait Explorer":
         unsafe_allow_html=True,
     )
 
-    # Load trait rows
-    trait_rows = load_trait_rows_from_csv(TRAIT_DB_PATH)
+    # Load trait rows (JSON preferred, CSV fallback)
+    trait_rows = load_trait_rows(TRAIT_DB_PATH, TRAITS_JSON_PATH)
 
     if not trait_rows:
         st.info("No trait rows could be loaded from the database.")
     else:
         # Build simple filter options
-        all_categories = sorted({r.get("category", "") for r in trait_rows if r.get("category")})
+        all_tracks = sorted({r.get("track", "") for r in trait_rows if r.get("track")})
+        all_subcategories = sorted({r.get("subcategory", "") for r in trait_rows if r.get("subcategory")})
         all_evidence = sorted({r.get("evidence_strength", "") for r in trait_rows if r.get("evidence_strength")})
+        all_quality_labels = ["Ready", "Draft", "Placeholder"]
 
-        col_search, col_cat, col_ev = st.columns([1.4, 0.8, 0.8])
+        col_search, col_track, col_subcat, col_ev, col_quality = st.columns([1.2, 0.9, 0.9, 0.8, 0.9])
         with col_search:
-            query = st.text_input("Search by rsID, gene, or trait name")
-        with col_cat:
-            cat_filter = st.multiselect("Filter by category", options=all_categories)
+            query = st.text_input("Search by rsID, gene, or title")
+        with col_track:
+            track_filter = st.multiselect("Filter by track", options=all_tracks)
+        with col_subcat:
+            subcat_filter = st.multiselect("Filter by subcategory", options=all_subcategories)
         with col_ev:
             ev_filter = st.multiselect("Filter by evidence", options=all_evidence)
+        with col_quality:
+            quality_filter = st.multiselect("Filter by quality", options=all_quality_labels)
+
+        show_liver = st.checkbox("Show Liver traits", value=True)
+        min_score = st.slider("Minimum completeness score", min_value=0, max_value=100, value=0, step=5)
 
         # Apply filters
         def match_row(row):
-            text = (row.get("rsid", "") + " " + row.get("gene", "") + " " + row.get("trait_name", "")).lower()
+            text = (row.get("rsid", "") + " " + row.get("gene", "") + " " + row.get("title", row.get("trait_name", ""))).lower()
             if query and query.lower() not in text:
                 return False
-            if cat_filter and row.get("category") not in cat_filter:
+            if track_filter and row.get("track") not in track_filter:
+                return False
+            if subcat_filter and row.get("subcategory") not in subcat_filter:
                 return False
             if ev_filter and row.get("evidence_strength") not in ev_filter:
+                return False
+            if quality_filter and row.get("quality_label") not in quality_filter:
+                return False
+            if int(row.get("completeness_score", 0)) < min_score:
+                return False
+            if not show_liver and (row.get("track") or "").strip().lower() == "liver":
                 return False
             return True
 
@@ -1511,21 +2453,45 @@ elif page == "Trait Explorer":
 
         if filtered:
             # Show a compact table
-            display_cols = [c for c in ["trait_id", "trait_name", "category", "rsid", "gene", "genotype", "effect_label", "evidence_strength"] if c in filtered[0]]
-            st.dataframe(filtered, use_container_width=True, hide_index=True)
+            display_cols = [c for c in ["trait_id", "title", "track", "subcategory", "quality_label", "completeness_score", "missing_fields_count", "rsid", "gene", "genotype", "effect_label", "effect_level", "evidence_strength"] if c in filtered[0]]
+            st.dataframe([{k: r.get(k) for k in display_cols} for r in filtered], use_container_width=True, hide_index=True)
+
+            # Lightweight "click" behavior via selector to show trait status.
+            unique_traits = []
+            seen = set()
+            for row in filtered:
+                key = (row.get("trait_id", ""), row.get("title", row.get("trait_name", "")))
+                if key in seen:
+                    continue
+                seen.add(key)
+                unique_traits.append(row)
+            selected_idx = st.selectbox(
+                "Inspect trait",
+                options=list(range(len(unique_traits))),
+                format_func=lambda i: f"{unique_traits[i].get('trait_id','')} - {unique_traits[i].get('title', unique_traits[i].get('trait_name',''))}",
+            )
+            selected_trait = unique_traits[selected_idx]
+            selected_label = selected_trait.get("quality_label", "Placeholder")
+            if selected_label == "Placeholder":
+                st.info("Coming soon: This trait is scaffolded for structure but not yet populated with variant rules and evidence.")
+            elif selected_label == "Draft":
+                st.warning("Draft: This trait exists but may have limited variants or incomplete explanations.")
+            else:
+                st.success("Ready: This trait is active in the interpreter.")
 
             st.markdown("---")
             st.markdown("#### JSON model preview for the first filtered trait")
-
-            first = filtered[0]
+            first = selected_trait
             # Convert a CSV row into a JSON-like trait object
             json_trait = {
                 "rsid": first.get("rsid"),
                 "gene": first.get("gene"),
-                "trait_category": first.get("category"),
-                "trait_name": first.get("trait_name"),
+                "trait_category": first.get("track"),
+                "trait_subcategory": first.get("subcategory"),
+                "trait_name": first.get("title", first.get("trait_name")),
                 "genotype": first.get("genotype"),
                 "variant_effect": first.get("effect_label"),
+                "effect_level": first.get("effect_level"),
                 "evidence_level": first.get("evidence_strength"),
                 "explanation": first.get("explanation"),
                 "mechanism": first.get("mechanism") or "",  # optional column
@@ -1542,10 +2508,12 @@ elif page == "Trait Explorer":
                     obj = {
                         "rsid": row.get("rsid"),
                         "gene": row.get("gene"),
-                        "trait_category": row.get("category"),
-                        "trait_name": row.get("trait_name"),
+                        "trait_category": row.get("track"),
+                        "trait_subcategory": row.get("subcategory"),
+                        "trait_name": row.get("title", row.get("trait_name")),
                         "genotype": row.get("genotype"),
                         "variant_effect": row.get("effect_label"),
+                        "effect_level": row.get("effect_level"),
                         "evidence_level": row.get("evidence_strength"),
                         "explanation": row.get("explanation"),
                         "mechanism": row.get("mechanism") or "",
@@ -1568,7 +2536,7 @@ elif page == "Trait Explorer":
 elif page == "Trait Science":
     st.markdown('<div class="section-title">Science behind the traits</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-sub">A high-level overview of how GenAI Engine turns individual genetic variants into trait interpretations.</div>',
+        '<div class="section-sub">A high-level overview of how VivaGene turns individual genetic variants into trait interpretations.</div>',
         unsafe_allow_html=True,
     )
 
@@ -1576,7 +2544,7 @@ elif page == "Trait Science":
     st.markdown(
         """
         A single nucleotide polymorphism (SNP) is a position in the genome where people commonly differ by a single base.
-        GenAI Engine uses SNPs that have been studied in the literature and are associated with traits such as caffeine
+        VivaGene uses SNPs that have been studied in the literature and are associated with traits such as caffeine
         metabolism, sleep patterns, exercise response, and certain neurobehavioral tendencies.
         """,
         unsafe_allow_html=True,
@@ -1598,7 +2566,7 @@ elif page == "Trait Science":
     st.markdown("### What this panel focuses on", unsafe_allow_html=True)
     st.markdown(
         """
-        The current prototype focuses on a small set of traits that connect to everyday lifestyle questions, such as:
+        The current research project focuses on a small set of traits that connect to everyday lifestyle questions, such as:
         
         - Sleep timing and sleep depth tendencies  
         - Response to caffeine and stimulants  
@@ -1615,7 +2583,7 @@ elif page == "Trait Science":
     st.markdown(
         """
         Most common genetic variants have small effects that interact with many other factors like sleep, stress,
-        environment, and medical history. GenAI Engine treats traits as gentle hints rather than answers. Any serious
+        environment, and medical history. VivaGene treats traits as gentle hints rather than answers. Any serious
         medical concern should always be discussed with a healthcare professional.
         """,
         unsafe_allow_html=True,
@@ -1657,10 +2625,10 @@ elif page == "Trait Science":
 
 # ---------- ABOUT ----------
 elif page == "About":
-    st.markdown('<div class="section-title">About GenAI Engine</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">About VivaGene</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-sub">'
-        'GenAI Engine is an educational prototype built to explore how AI can help interpret '
+        'VivaGene is an educational research project built to explore how AI can help interpret '
         'small scale genomic trait panels in a transparent and lifestyle aware way.</div>',
         unsafe_allow_html=True,
     )
@@ -1702,7 +2670,7 @@ Match against trait_database.csv
    ↓
 Build JSON report object
    ↓
-Call OpenAI model for overview text
+Call Gemini model for overview text
    ↓
 Render HTML report (and optional PDF)""",
         language="text",
@@ -1712,7 +2680,7 @@ Render HTML report (and optional PDF)""",
     st.markdown('<div class="section-title">Safety and limitations</div>', unsafe_allow_html=True)
     st.markdown(
         """
-        GenAI Engine is designed as an educational tool. It highlights potential trait patterns and how they might relate to
+        VivaGene is designed as an educational tool. It highlights potential trait patterns and how they might relate to
         lifestyle, but it does not measure risk for disease or replace professional genetic counseling. All interpretations
         are simplified and should be viewed as conversation starters, not conclusions.
         """,
@@ -1723,8 +2691,8 @@ Render HTML report (and optional PDF)""",
     st.markdown('<div class="section-title">Frequently asked questions</div>', unsafe_allow_html=True)
     st.markdown(
         """
-        **Does GenAI Engine store my DNA data?**  
-        In this prototype, files are handled within your session. A production deployment would include a clear privacy
+        **Does VivaGene store my DNA data?**  
+        In this research project, files are handled within your session. A production deployment would include a clear privacy
         policy and options for data deletion or local-only processing.
 
         **Can this tell me what conditions I have or will develop?**  
@@ -1747,10 +2715,11 @@ elif page == "Contact":
     st.markdown('<div class="section-title">Contact</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-sub">'
-        'Interested in the science, the code, or future collaborations around AI, genomics, and lifestyle? '
+        'Questions, feedback, or research collaboration? '
         'Use the form below to leave a message.</div>',
         unsafe_allow_html=True,
     )
+    st.caption("For privacy, do not send raw genotype files through this form.")
 
     with st.form("contact_form"):
         name = st.text_input("Name")
@@ -1770,20 +2739,52 @@ elif page == "Contact":
                     "Thank you for reaching out. In a production environment this would send your message to the project owner."
               )
 
+# ---------- VALIDATION DEV ----------
+elif page == "Validation (Dev)" and str(os.environ.get("SHOW_VALIDATION", "0")).strip() == "1":
+    st.markdown('<div class="section-title">Validation (Dev)</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-sub">Local validation artifacts for benchmarking and paper figures.</div>',
+        unsafe_allow_html=True,
+    )
+    from pathlib import Path as _Path
+    out_dir = _Path("validation_outputs").resolve()
+    if not out_dir.exists():
+        st.info("No validation outputs found yet. Run `python -m validation.run_validation` first.")
+    else:
+        pngs = sorted(out_dir.glob("*.png"))
+        csvs = sorted(out_dir.glob("*.csv"))
+        jsons = sorted(out_dir.glob("*.json"))
+
+        if pngs:
+            st.markdown("#### Plots")
+            for p in pngs:
+                st.markdown(f"**{p.name}**")
+                st.image(str(p), use_container_width=True)
+        if csvs or jsons:
+            st.markdown("#### Downloads")
+            for f in csvs + jsons:
+                data = f.read_bytes()
+                st.download_button(
+                    label=f"Download {f.name}",
+                    data=data,
+                    file_name=f.name,
+                    mime="application/octet-stream",
+                    key=f"dl_{f.name}",
+                )
+
 st.markdown("</div>", unsafe_allow_html=True)
 # ---------- Global footer ----------
 st.markdown(
     """
     <div class="site-footer">
       <div>
-        GenAI Engine · Educational genomics prototype · Not for diagnosis or treatment.
+        VivaGene · Educational genomics insights · Not medical advice.
       </div>
       <div>
-        Built by Anjali Nalla · Independent project, not affiliated with 23andMe or any consumer genetics company.
+        Built by Anjali Nalla · Independent research project.
       </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 st.markdown("---")
-st.caption("Prototype only. No data is persisted or transmitted beyond this session.")
