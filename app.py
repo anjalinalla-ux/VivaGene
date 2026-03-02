@@ -815,16 +815,30 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     :root {
-        --color-bg-primary: #f7f8fa;
-        --color-bg-secondary: #ffffff;
-        --color-border: #e5e7eb;
-        --color-accent: #1f3c88;
-        --color-accent-muted: #e8eefb;
-        --color-text-primary: #111827;
-        --color-text-secondary: #4b5563;
+        --bg-primary: #0b0f19;
+        --bg-secondary: #111827;
+        --bg-elevated: #161f2e;
+        --border-subtle: #1f2937;
+        --text-primary: #e5e7eb;
+        --text-secondary: #9ca3af;
+        --accent: #3b82f6;
+        --accent-muted: #2563eb;
         --radius-sm: 6px;
-        --radius-md: 10px;
-        --radius-lg: 16px;
+        --radius-md: 12px;
+        --radius-lg: 18px;
+        --transition-base: 220ms cubic-bezier(.4,0,.2,1);
+
+        /* Backward-compatible aliases for existing selectors */
+        --color-bg-primary: var(--bg-primary);
+        --color-bg-secondary: var(--bg-secondary);
+        --color-border: var(--border-subtle);
+        --color-accent: var(--accent);
+        --color-accent-muted: var(--accent-muted);
+        --color-text-primary: var(--text-primary);
+        --color-text-secondary: var(--text-secondary);
+        --radius-sm: 6px;
+        --radius-md: 12px;
+        --radius-lg: 18px;
         --spacing-xs: 4px;
         --spacing-sm: 8px;
         --spacing-md: 16px;
@@ -832,27 +846,27 @@ st.markdown(
         --spacing-xl: 40px;
         --transition-fast: 120ms cubic-bezier(.4,0,.2,1);
         --transition-base: 220ms cubic-bezier(.4,0,.2,1);
-        --shadow-soft: 0 4px 10px rgba(0,0,0,0.05);
-        --shadow-soft-hover: 0 8px 16px rgba(0,0,0,0.08);
-        --color-success-bg: #e8f5ec;
-        --color-success-text: #1f5134;
-        --color-warn-bg: #fcf4e5;
-        --color-warn-text: #6a4a16;
+        --shadow-soft: 0 8px 24px rgba(0,0,0,0.35);
+        --shadow-soft-hover: 0 12px 30px rgba(0,0,0,0.45);
+        --color-success-bg: #10251b;
+        --color-success-text: #9cd9b4;
+        --color-warn-bg: #2a2112;
+        --color-warn-text: #f2d39a;
     }
 
     html { scroll-behavior: smooth; }
     * { box-sizing: border-box; }
 
     body {
-        background: var(--color-bg-primary);
-        color: var(--color-text-primary);
+        background: var(--bg-primary);
+        color: var(--text-primary);
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
         font-size: 15px;
         line-height: 1.6;
         font-weight: 400;
     }
     [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-        background: var(--color-bg-primary);
+        background: var(--bg-primary);
     }
 
     .main .block-container {
@@ -900,7 +914,11 @@ st.markdown(
     }
 
     .hero-band {
-        background: var(--color-bg-secondary);
+        background: linear-gradient(
+          180deg,
+          #0b0f19 0%,
+          #0e1422 100%
+        );
         border: 1px solid var(--color-border);
         border-radius: var(--radius-lg);
         padding: var(--spacing-xl);
@@ -924,7 +942,7 @@ st.markdown(
         padding: var(--spacing-xs) var(--spacing-sm);
         border-radius: var(--radius-sm);
         border: 1px solid var(--color-border);
-        background: var(--color-accent-muted);
+        background: var(--bg-elevated);
         color: var(--color-accent);
         font-size: 13px;
         text-transform: uppercase;
@@ -1110,7 +1128,7 @@ st.markdown(
         border-color: var(--color-accent) !important;
     }
     .stButton > button:disabled {
-        background: var(--color-bg-primary) !important;
+        background: var(--bg-elevated) !important;
         color: var(--color-text-secondary) !important;
         border-color: var(--color-border) !important;
         cursor: not-allowed !important;
@@ -1122,6 +1140,8 @@ st.markdown(
     [data-testid="stTextInput"] input,
     [data-testid="stTextArea"] textarea,
     [data-testid="stSelectbox"] div[data-baseweb="select"] {
+        background: var(--bg-elevated) !important;
+        color: var(--text-primary) !important;
         border-radius: var(--radius-sm) !important;
         border: 1px solid var(--color-border) !important;
         transition: all var(--transition-fast);
