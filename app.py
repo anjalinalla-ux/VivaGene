@@ -154,6 +154,134 @@ def sort_traits_for_display(traits):
     return sorted(items, key=key_fn)
 
 
+def normalize_category(raw: str) -> str:
+    text = str(raw or "").strip().lower()
+    if not text:
+        return ""
+    neuro = ["sleep", "stress", "anxiety", "focus", "attention", "mood", "dopamine", "serotonin", "neuro", "behavior", "cognition", "hpa", "circadian", "sensory"]
+    nutrition = ["nutrition", "vitamin", "folate", "b12", "iron", "glucose", "lipid", "omega", "taste", "caffeine", "alcohol", "metabolism", "appetite"]
+    fitness = ["fitness", "strength", "endurance", "muscle", "recovery", "vo2", "training", "injury", "actn3", "ace"]
+    liver = ["liver", "nafld", "fatty liver", "alt", "ast", "pnpla3", "tm6sf2"]
+    if any(k in text for k in neuro):
+        return "Neurobehavior"
+    if any(k in text for k in nutrition):
+        return "Nutrition"
+    if any(k in text for k in fitness):
+        return "Fitness"
+    if any(k in text for k in liver):
+        return "Liver"
+    return ""
+
+
+def two_sentence_text(text: str) -> str:
+    raw = " ".join(str(text or "").strip().split())
+    if not raw:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+", raw)
+    out = [p for p in parts if p.strip()][:2]
+    return " ".join(out).strip()
+
+
+def fallback_explanation_for_trait(trait: dict, category: str) -> str:
+    effect = str(trait.get("effect_label", "")).strip() or str(trait.get("effect_level", "")).strip() or "a trait tendency"
+    cat_line = {
+        "Neurobehavior": "attention, stress response, or sleep rhythm patterns",
+        "Nutrition": "stimulant, appetite, or nutrient-response patterns",
+        "Fitness": "training response or recovery patterns",
+        "Liver": "metabolic processing patterns",
+    }.get(category, "day-to-day trait patterns")
+    return (
+        f"This variant pattern is associated with {effect} in published studies. "
+        f"In daily life, this may relate to {cat_line}, though individual response can vary."
+    )
+
+
+def citation_to_link(c: dict):
+    if not isinstance(c, dict):
+        return ("Source", "")
+    ident = str(c.get("identifier", "")).strip()
+    title = str(c.get("title", "")).strip() or ident or "Source"
+    doi = str(c.get("doi", "")).strip()
+    pmid = str(c.get("pmid", "")).strip()
+    pmcid = str(c.get("pmcid", "")).strip()
+    src = str(c.get("source_url", "")).strip()
+    if doi:
+        return (title, f"https://doi.org/{doi}")
+    if pmid:
+        return (title, f"https://europepmc.org/article/MED/{pmid}")
+    if pmcid:
+        return (title, f"https://europepmc.org/article/PMC/{pmcid}")
+    if ident.upper().startswith("DOI:"):
+        return (title, f"https://doi.org/{ident.split(':', 1)[1].strip()}")
+    if ident.upper().startswith("PMID:"):
+        return (title, f"https://europepmc.org/article/MED/{ident.split(':', 1)[1].strip()}")
+    if ident.upper().startswith("PMCID:"):
+        return (title, f"https://europepmc.org/article/PMC/{ident.split(':', 1)[1].strip()}")
+    return (title, src)
+
+
+def _html_escape(text: str) -> str:
+    s = str(text or "")
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def build_category_panel_html(category: str, traits: list[dict]) -> str:
+    cards = []
+    for trait in traits:
+        if not isinstance(trait, dict):
+            continue
+        trait_name = _html_escape(trait.get("trait_name", trait.get("trait_id", "Trait")))
+        gene = _html_escape(trait.get("gene", ""))
+        rsid = _html_escape(trait.get("rsid", ""))
+        genotype = _html_escape(trait.get("user_genotype", ""))
+        effect_line = _html_escape(str(trait.get("effect_level", "")).strip() or str(trait.get("effect_label", "")).strip() or "Observed")
+        expl = _html_escape(trait.get("_display_explanation", ""))
+        cites = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
+        if cites:
+            cite_lines = []
+            for c in cites[:3]:
+                label, url = citation_to_link(c)
+                label_h = _html_escape(label)
+                url_h = _html_escape(url)
+                if url_h:
+                    cite_lines.append(f"<li><a href='{url_h}' target='_blank'>{label_h}</a></li>")
+                else:
+                    cite_lines.append(f"<li>{label_h}</li>")
+            citations_html = "<ul class='trait-citations'>" + "".join(cite_lines) + "</ul>"
+        else:
+            citations_html = "<div class='trait-citations-empty'>No citations available yet for this trait.</div>"
+        cards.append(
+            f"""
+            <div class='trait-mini-card'>
+              <div class='trait-mini-title'>{trait_name}</div>
+              <div class='trait-mini-meta'>Gene {gene} · rsID {rsid} · Genotype {genotype}</div>
+              <div class='trait-mini-meta'>Signal {effect_line}</div>
+              <div class='trait-mini-expl'>{expl}</div>
+              <div class='trait-mini-cite-label'>Citations</div>
+              {citations_html}
+            </div>
+            """
+        )
+    count = len([t for t in traits if isinstance(t, dict)])
+    return f"""
+    <div class='results-panel'>
+      <div class='results-panel-header'>
+        <span>{_html_escape(category)}</span>
+        <span class='results-count'>{count}</span>
+      </div>
+      <div class='results-panel-body'>
+        {''.join(cards)}
+      </div>
+    </div>
+    """
+
+
 def build_filtered_report(report_obj, selected_traits):
     report = normalize_report(dict(report_obj) if isinstance(report_obj, dict) else {})
     selected = [t for t in (selected_traits or []) if isinstance(t, dict)]
@@ -1196,6 +1324,88 @@ st.markdown(
         font-size: 13px;
         color: var(--color-text-secondary);
     }
+    .results-panel {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        overflow: hidden;
+        margin-bottom: var(--spacing-md);
+    }
+    .results-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #ffffff;
+        color: #111827;
+        font-weight: 600;
+    }
+    .results-count {
+        min-width: 26px;
+        text-align: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        color: #374151;
+        font-size: 12px;
+    }
+    .results-panel-body {
+        height: 420px;
+        overflow-y: auto;
+        padding: 10px;
+        background: #ffffff;
+    }
+    .trait-mini-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        color: #111827;
+    }
+    .trait-mini-title {
+        font-size: 15px;
+        line-height: 1.4;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #111827;
+    }
+    .trait-mini-meta {
+        font-size: 13px;
+        line-height: 1.5;
+        color: #4b5563;
+        margin-bottom: 2px;
+    }
+    .trait-mini-expl {
+        font-size: 13px;
+        line-height: 1.5;
+        color: #1f2937;
+        margin: 6px 0 8px;
+    }
+    .trait-mini-cite-label {
+        font-size: 12px;
+        color: #6b7280;
+        margin-bottom: 4px;
+    }
+    .trait-citations {
+        margin: 0;
+        padding-left: 16px;
+    }
+    .trait-citations li {
+        margin: 0 0 3px;
+        font-size: 12px;
+    }
+    .trait-citations a {
+        color: #1d4ed8;
+        text-decoration: underline;
+    }
+    .trait-citations-empty {
+        font-size: 12px;
+        color: #6b7280;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1912,134 +2122,79 @@ elif page == "Upload & Report":
                         st.caption("This overview is educational. It does not diagnose disease or replace medical care.")
 
                         st.markdown("### Trait cards")
-                        traits_by_category = {}
-                        for t in enriched_traits:
-                            cat = t.get("category", t.get("track", "General"))
-                            traits_by_category.setdefault(cat, []).append(t)
+                        grouped = {"Neurobehavior": [], "Nutrition": [], "Fitness": [], "Liver": []}
+                        trait_ids_for_fetch = []
+                        for trait in enriched_traits:
+                            if not isinstance(trait, dict):
+                                continue
+                            raw_cat = " ".join(
+                                [
+                                    str(trait.get("category", "")),
+                                    str(trait.get("track", "")),
+                                    str(trait.get("subcategory", "")),
+                                    str(trait.get("trait_name", "")),
+                                ]
+                            )
+                            norm_cat = normalize_category(raw_cat)
+                            if not norm_cat:
+                                norm_cat = "Neurobehavior"  # keep all matched traits visible
+                            if norm_cat == "Liver" and not include_optional_liver:
+                                norm_cat = "Neurobehavior"
 
-                        for category in sorted(traits_by_category.keys()):
-                            st.markdown(f"#### {category}")
-                            for trait in traits_by_category.get(category, []):
-                                with st.container():
-                                    trait_name = trait.get("trait_name", trait.get("trait_id", "Trait"))
-                                    gene = trait.get("gene", "")
-                                    rsid = trait.get("rsid", "")
-                                    genotype = trait.get("user_genotype", "")
-                                    effect_label = trait.get("effect_label", "")
-                                    effect_level = trait.get("effect_level", "")
-                                    evidence_strength = trait.get("evidence_strength", "")
-                                    evidence_status = str(trait.get("evidence_status", "missing")).strip().lower()
-                                    life_impact = str(trait.get("explanation", "")).strip()
-                                    citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
-                                    evidence_snippets = trait.get("evidence_snippets", []) if isinstance(trait.get("evidence_snippets", []), list) else []
-                                    search_provenance = trait.get("search_provenance", {}) if isinstance(trait.get("search_provenance", {}), dict) else {}
-                                    trust = trait.get("trust", {}) if isinstance(trait.get("trust", {}), dict) else {}
+                            explanation_raw = two_sentence_text(trait.get("explanation", ""))
+                            citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
+                            if not explanation_raw:
+                                explanation_raw = fallback_explanation_for_trait(trait, norm_cat)
+                            trait["_display_explanation"] = explanation_raw
+                            if not citations:
+                                trait.setdefault("citations", [])
+                            trait["_normalized_category"] = norm_cat
+                            grouped.setdefault(norm_cat, []).append(trait)
 
-                                    st.markdown(f"**{trait_name}**")
-                                    st.caption(f"Category: {category}")
-                                    st.caption(f"{gene} · {rsid} · Genotype {genotype}")
-                                    st.markdown(
-                                        f"Effect: **{effect_label or 'Observed variant'}** "
-                                        f"`{str(effect_level or 'Unknown').upper()}`"
-                                    )
-                                    if evidence_status == "found":
-                                        st.markdown(
-                                            "<span class='evidence-badge found'>✅ Evidence Found</span>",
-                                            unsafe_allow_html=True,
-                                        )
-                                    else:
-                                        st.markdown(
-                                            "<span class='evidence-badge missing'>⚠️ Evidence not found (query logged)</span>",
-                                            unsafe_allow_html=True,
-                                        )
-                                    if evidence_status == "found" and life_impact and len(citations) >= 1:
-                                        st.write(life_impact)
-                                    else:
-                                        life_impact = ""
-                                        st.write("Explanation withheld (no evidence retrieved).")
-                                        st.info("No supporting snippets were retrieved from the local evidence corpus yet, so VivaGene will not generate an explanation to avoid unsupported claims.")
-                                        q = str(search_provenance.get("query", "")).strip()
-                                        if q:
-                                            st.caption(f"Search Provenance: `{q}`")
-                                    st.caption(f"Evidence level: {evidence_strength or 'Emerging'}")
-                                    if trust:
-                                        cov = trust.get("coverage", trait.get("coverage", None))
-                                        cov_txt = f"{float(cov) * 100:.0f}%" if isinstance(cov, (int, float)) else "n/a"
-                                        st.caption(
-                                            f"Trust Panel · Bucket: {trust.get('bucket', effect_level)} · "
-                                            f"Confidence: {trust.get('confidence', trait.get('confidence', 'Low'))} · "
-                                            f"Coverage: {cov_txt} · Evidence quality: {trust.get('evidence_quality', 'Low')}"
-                                        )
-                                        bias_note = str(trust.get("bias_note", "")).strip()
-                                        if bias_note:
-                                            st.caption(f"Bias note: {bias_note}")
-                                    with st.expander("Evidence & citations"):
-                                        if evidence_status == "found" and citations:
-                                            st.markdown("Sources:")
-                                            for c in citations[:3]:
-                                                if isinstance(c, dict):
-                                                    label_c = str(c.get("label", "")).strip()
-                                                    title_c = str(c.get("title", "")).strip() or str(c.get("source", "")).strip() or "Source"
-                                                    year_c = str(c.get("year", "")).strip()
-                                                    ident_c = str(c.get("identifier", "")).strip()
-                                                    url_c = str(c.get("source_url", c.get("url", ""))).strip()
-                                                    source_c = str(c.get("journal", "")).strip() or str(c.get("source", "")).strip() or ""
-                                                    if not source_c and url_c:
-                                                        source_c = url_c.split("/")[2] if "://" in url_c and len(url_c.split("/")) > 2 else url_c
-                                                    year_bit = f" ({year_c})" if year_c else ""
-                                                    lead = f"[{label_c}] " if label_c else ""
-                                                    tail = f" — {ident_c}" if ident_c else ""
-                                                    source_tail = f" · {source_c}" if source_c else ""
-                                                    st.markdown(f"- {lead}{title_c}{year_bit}{tail}{source_tail}")
-                                                else:
-                                                    text_c = str(c).strip()
-                                                    if "://" in text_c:
-                                                        parts = text_c.split("/")
-                                                        domain = parts[2] if len(parts) > 2 else text_c
-                                                        st.markdown(f"- {domain}")
-                                                    else:
-                                                        st.markdown(f"- {text_c}")
-                                        else:
-                                            st.write("No paper retrieved for this trait yet.")
-                                        if evidence_snippets and evidence_status == "found":
-                                            st.caption(f"Retrieved snippets: {len(evidence_snippets)}")
-                                        elif evidence_status != "found":
-                                            q = str(search_provenance.get("query", "")).strip()
-                                            req = str(search_provenance.get("request_url", "")).strip()
-                                            hits = search_provenance.get("hits", "")
-                                            if q:
-                                                st.caption(f"Latest query: {q}")
-                                            if req:
-                                                st.caption(f"Request URL: {req}")
-                                            if str(hits) != "":
-                                                st.caption(f"Hits: {hits}")
-                                    trait_id_for_fetch = str(trait.get("trait_id", "")).strip()
-                                    if trait_id_for_fetch:
-                                        if st.button(
-                                            "Processing..." if st.session_state.evidence_processing else "Fetch evidence for this trait",
-                                            key=f"fetch_{trait_id_for_fetch}",
-                                            disabled=bool(st.session_state.evidence_processing or st.session_state.report_processing),
-                                        ):
-                                            st.session_state.evidence_processing = True
-                                            progress_t = st.progress(10, text=f"Refreshing evidence for {trait_id_for_fetch}...")
-                                            with st.spinner(f"Refreshing evidence for {trait_id_for_fetch}..."):
-                                                progress_t.progress(55, text="Querying Europe PMC...")
-                                                rc_t, out_t, err_t = run_evidence_builder(max_traits=1, trait_id=trait_id_for_fetch)
-                                            progress_t.progress(100, text="Trait evidence refresh complete.")
-                                            if rc_t == 0:
-                                                st.success(f"Evidence refresh complete for {trait_id_for_fetch}.")
-                                            else:
-                                                st.warning(f"Evidence refresh finished with warnings for {trait_id_for_fetch}.")
-                                            with st.expander(f"Fetch log: {trait_id_for_fetch}"):
-                                                if out_t:
-                                                    st.code(out_t, language="json")
-                                                if err_t:
-                                                    st.code(err_t, language="text")
-                                            st.session_state.evidence_processing = False
-                                            st.rerun()
+                            tid = str(trait.get("trait_id", "")).strip()
+                            if tid:
+                                trait_ids_for_fetch.append(tid)
+
+                        categories_in_order = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver"] if include_optional_liver else [])
+                        panel_cols = st.columns(len(categories_in_order)) if categories_in_order else []
+                        for idx, cat_name in enumerate(categories_in_order):
+                            traits_cat = grouped.get(cat_name, [])
+                            with panel_cols[idx]:
+                                st.markdown(build_category_panel_html(cat_name, traits_cat), unsafe_allow_html=True)
+
+                        st.markdown("#### Fetch evidence for a single trait")
+                        if trait_ids_for_fetch:
+                            unique_ids = sorted(set(trait_ids_for_fetch))
+                            selected_tid = st.selectbox(
+                                "Trait",
+                                options=unique_ids,
+                                key="trait_fetch_select",
+                            )
+                            if st.button(
+                                "Processing..." if st.session_state.evidence_processing else "Fetch evidence for selected trait",
+                                key="fetch_selected_trait",
+                                disabled=bool(st.session_state.evidence_processing or st.session_state.report_processing),
+                            ):
+                                st.session_state.evidence_processing = True
+                                progress_t = st.progress(10, text=f"Refreshing evidence for {selected_tid}...")
+                                with st.spinner(f"Refreshing evidence for {selected_tid}..."):
+                                    progress_t.progress(55, text="Querying Europe PMC...")
+                                    rc_t, out_t, err_t = run_evidence_builder(max_traits=1, trait_id=selected_tid)
+                                progress_t.progress(100, text="Trait evidence refresh complete.")
+                                if rc_t == 0:
+                                    st.success(f"Evidence refresh complete for {selected_tid}.")
+                                else:
+                                    st.warning(f"Evidence refresh finished with warnings for {selected_tid}.")
+                                with st.expander(f"Fetch log: {selected_tid}"):
+                                    if out_t:
+                                        st.code(out_t, language="json")
+                                    if err_t:
+                                        st.code(err_t, language="text")
+                                st.session_state.evidence_processing = False
+                                st.rerun()
 
                         # Runtime integrity checks
-                        rendered_count = sum(len(v) for v in traits_by_category.values())
+                        rendered_count = sum(len(v) for v in grouped.values())
                         if rendered_count != len(enriched_traits):
                             st.warning(
                                 f"Integrity check: rendered trait cards ({rendered_count}) do not match matched traits ({len(enriched_traits)})."
