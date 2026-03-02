@@ -33,6 +33,21 @@ def _first_sentence(text: str) -> str:
     return parts[0].strip() if parts else raw
 
 
+def _strip_html_and_sections(text: str) -> str:
+    raw = str(text or "")
+    raw = re.sub(r"<[^>]+>", " ", raw)
+    raw = re.sub(r"\b(Background|Objectives|Methods|Results|Conclusion|Conclusions)\b\s*[:\-]?", " ", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"\s+", " ", raw).strip()
+    return raw
+
+
+def _clean_mode_text(text: str) -> str:
+    t = _strip_html_and_sections(text)
+    # Remove repeated citation tags
+    t = re.sub(r"(\[PMID:[^\]]+\]){2,}", r"\1", t)
+    return t.strip()
+
+
 def build_explanation(trait, evidence, mode) -> dict:
     t = trait if isinstance(trait, dict) else {}
     e = evidence if isinstance(evidence, dict) else {}
@@ -46,6 +61,8 @@ def build_explanation(trait, evidence, mode) -> dict:
         return {
             "summary": "Evidence pending — no explanatory claims shown yet (RAG safety).",
             "life_impact": "",
+            "patient_summary": "Evidence pending — no explanatory claims shown yet (RAG safety).",
+            "doctor_summary": "Evidence pending — no explanatory claims shown yet (RAG safety).",
             "next_steps": SAFE_NEXT_STEPS[:2],
             "citations": citations,
             "claim_map": [],
@@ -56,31 +73,22 @@ def build_explanation(trait, evidence, mode) -> dict:
     tag2 = _citation_tag(citations[1]) if len(citations) > 1 else tag1
     effect = str(t.get("effect_label", "")).strip() or str(t.get("effect_level", "")).strip() or "a non-typical signal"
     category = str(t.get("category", "")).strip().lower()
-    s1 = _first_sentence((snippets[0] or {}).get("text", ""))
-    s2 = _first_sentence((snippets[1] or {}).get("text", "")) if len(snippets) > 1 else ""
+    gene = str(t.get("gene", "")).strip() or "the reported gene"
+    rsid = str(t.get("rsid", "")).strip() or "the reported rsID"
+    genotype = str(t.get("user_genotype", "")).strip() or "the observed genotype"
+    bucket = str(t.get("effect_level", "")).strip() or str(t.get("bucket", "")).strip() or "a non-typical signal"
 
     if is_doctor:
-        summary = (
-            f"This trait shows {effect}, with supporting association signals in retrieved literature; findings should be interpreted as probabilistic and context-dependent. {tag1}"
-        ).strip()
-        life = (
-            f"Retrieved evidence suggests this signal may correspond to observable variation in {category or 'this domain'}, but effect size and external validity can vary. {tag2}"
-        ).strip()
-        if "[PMID:" not in summary and "INSUFFICIENT_EVIDENCE" not in summary:
-            summary = "Evidence pending — no explanatory claims shown yet (RAG safety)."
-            life = ""
+        summary = f"Based on {gene} {rsid} genotype {genotype}, this profile suggests {effect} ({bucket}) in association studies, with non-deterministic effect size. {tag1}".strip()
+        life = f"This may correspond to measurable variation in {category or 'this domain'} at the group level, though individual expression and generalizability can vary. {tag2}".strip()
+        mech = f"Current evidence supports association-level interpretation rather than causal diagnosis. {tag2}".strip()
+        summary = f"{summary} {mech}".strip()
     else:
-        summary = (
-            f"Research linked to this trait suggests {effect} may appear in some people, but this is not deterministic. {tag1}"
-        ).strip()
-        life = (
-            f"In daily life, this may show up as differences in {category or 'related patterns'} from one person to another. {tag2}"
-        ).strip()
+        summary = f"Based on {gene} {rsid} genotype {genotype}, this suggests {effect}. {tag1}".strip()
+        life = f"In daily life, this may show up as differences in {category or 'related patterns'}, but responses can vary from person to person. {tag2}".strip()
 
-    if s1:
-        summary = f"{summary} {_first_sentence(s1)} {tag1}".strip()
-    if s2 and life:
-        life = f"{life} {_first_sentence(s2)} {tag2}".strip()
+    summary = _clean_mode_text(summary)
+    life = _clean_mode_text(life)
 
     claim_map = []
     if tag1:
@@ -88,9 +96,18 @@ def build_explanation(trait, evidence, mode) -> dict:
     if life and tag2:
         claim_map.append({"claim": life, "pmids": [tag2.replace("[", "").replace("]", "")]})
 
+    patient_summary = _clean_mode_text(
+        f"Based on {gene} {rsid} genotype {genotype}, this suggests {effect}. {tag1}".strip()
+    )
+    doctor_summary = _clean_mode_text(
+        f"Based on {gene} {rsid} genotype {genotype}, this profile suggests {effect} ({bucket}) with probabilistic, non-diagnostic interpretation. {tag1}".strip()
+    )
+
     return {
         "summary": summary,
         "life_impact": life,
+        "patient_summary": patient_summary,
+        "doctor_summary": doctor_summary,
         "next_steps": SAFE_NEXT_STEPS,
         "citations": citations[:3],
         "claim_map": claim_map,

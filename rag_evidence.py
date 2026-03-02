@@ -65,15 +65,25 @@ def europe_pmc_search(query: str, max_results: int = 8) -> list[dict]:
 
 
 def extract_snippets(paper_json) -> list[str]:
+    def clean_text(v: str) -> str:
+        s = re.sub(r"<[^>]+>", " ", str(v or ""))
+        s = re.sub(r"\b(Background|Objectives|Methods|Results|Conclusion|Conclusions)\b\s*[:\-]?", " ", s, flags=re.IGNORECASE)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    def clip_words(v: str, n: int = 40) -> str:
+        words = str(v or "").split()
+        return " ".join(words[:n]).strip()
+
     p = paper_json if isinstance(paper_json, dict) else {}
-    abstract = str(p.get("abstractText", "")).strip()
-    title = str(p.get("title", "")).strip()
+    abstract = clean_text(p.get("abstractText", ""))
+    title = clean_text(p.get("title", ""))
     if abstract:
         sentences = re.split(r"(?<=[.!?])\s+", abstract)
-        out = [s.strip() for s in sentences if s.strip()][:2]
-        return out if out else [abstract[:300]]
+        out = [clip_words(s.strip(), 40) for s in sentences if s.strip()][:2]
+        return out if out else [clip_words(abstract, 40)]
     if title:
-        return [title]
+        return [clip_words(title, 40)]
     return []
 
 

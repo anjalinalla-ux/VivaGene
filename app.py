@@ -20,6 +20,7 @@ from genomics_interpreter import (
     build_prs_report_from_upload,
     generate_text_report,
     generate_html_report,
+    parse_genotype_file,
 )
 import os
 from utils.trait_quality import compute_trait_completeness, trait_has_variants
@@ -28,6 +29,7 @@ from polygenic import compute_prs
 from evidence_guard import enforce_evidence_only
 from rag_evidence import ensure_trait_evidence
 from explain import build_explanation
+from study_pack_loader import load_all_trait_packs
 try:
     from openai import OpenAI
 except Exception:
@@ -344,7 +346,7 @@ def build_tab_panel_html(traits: list[dict], mode_label: str) -> str:
                 """
             ).strip()
         )
-    cards_html = "\n".join(cards) if cards else "<div class='trait-citations-empty'>No traits in this category.</div>"
+    cards_html = "\n".join(cards) if cards else "<div class='trait-citations-empty'>No matching variants from your file for this category yet.</div>"
     return textwrap.dedent(
         f"""
         <div class='single-results-panel'>
@@ -355,6 +357,36 @@ def build_tab_panel_html(traits: list[dict], mode_label: str) -> str:
         </div>
         """
     ).strip()
+
+
+def compute_category_overlap(parsed_rsids: set[str], include_liver: bool) -> dict:
+    packs = load_all_trait_packs(
+        base_dir="trait_study_packs",
+        categories=["Neurobehavior", "Nutrition", "Fitness", "Liver"],
+        include_optional=include_liver,
+    )
+    by_cat = {"Neurobehavior": set(), "Nutrition": set(), "Fitness": set(), "Liver": set()}
+    for p in packs:
+        if not isinstance(p, dict):
+            continue
+        cat = str(p.get("category", "")).strip()
+        if cat not in by_cat:
+            continue
+        for v in p.get("variants", []) if isinstance(p.get("variants", []), list) else []:
+            if not isinstance(v, dict):
+                continue
+            r = str(v.get("rsid", "")).strip()
+            if r:
+                by_cat[cat].add(r)
+    out = {}
+    for cat, rsids in by_cat.items():
+        overlap = parsed_rsids & rsids
+        out[cat] = {
+            "panel_rsids": len(rsids),
+            "overlap_count": len(overlap),
+            "overlap_sample": sorted(list(overlap))[:10],
+        }
+    return out
 
 
 def build_filtered_report(report_obj, selected_traits):
@@ -1450,6 +1482,8 @@ st.markdown(
         margin-bottom: 10px;
         color: #111827;
     }
+    .trait-card, .trait-card * { color: #111827 !important; }
+    .trait-muted { color: #6b7280 !important; }
     .trait-mini-title {
         font-size: 15px;
         line-height: 1.4;
@@ -2184,6 +2218,9 @@ elif page == "Upload & Report":
                 with open(temp_path, "wb") as f:
                     f.write(uploaded.getvalue())
                 genotype_path = str(temp_path)
+                parsed_variants = parse_genotype_file(genotype_path)
+                parsed_rsids = {str(v.get("rsid", "")).strip() for v in parsed_variants if isinstance(v, dict) and str(v.get("rsid", "")).strip()}
+                overlap_debug = compute_category_overlap(parsed_rsids, include_optional_liver)
 
                 try:
                     report = build_prs_report_from_upload(
@@ -2199,6 +2236,19 @@ elif page == "Upload & Report":
 
                     # Save for chatbot
                     st.session_state.last_report = report
+                    with st.expander("Debug: parser and category overlap"):
+                        st.write(f"Parsed variants: {len(parsed_variants)}")
+                        st.write(f"First 10 rsIDs: {sorted(list(parsed_rsids))[:10]}")
+                        for cat in ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver"] if include_optional_liver else []):
+                            info = overlap_debug.get(cat, {})
+                            st.write(
+                                f"{cat} overlap count: {info.get('overlap_count', 0)} "
+                                f"(panel rsIDs: {info.get('panel_rsids', 0)})"
+                            )
+                        if int(overlap_debug.get("Neurobehavior", {}).get("overlap_count", 0) or 0) == 0:
+                            st.info(
+                                "Your uploaded file does not contain the rsIDs used by the Neurobehavior panel (0 matches). This is normal for some genotype exports or filtered demo files."
+                            )
 
                     if not report.get("traits"):
                         st.warning("No traits were matched. Check that the file uses the expected rsIDs and genotypes.")
@@ -2285,7 +2335,8 @@ elif page == "Upload & Report":
                                 max_results=8,
                             )
                             exp = build_explanation(trait, evidence, mode_now)
-                            summary_txt = two_sentence_text(exp.get("summary", ""))
+                            summary_src = exp.get("doctor_summary", "") if "Doctor" in mode_now else exp.get("patient_summary", "")
+                            summary_txt = two_sentence_text(summary_src or exp.get("summary", ""))
                             life_txt = two_sentence_text(exp.get("life_impact", ""))
                             if not has_any_variant:
                                 summary_txt = "No variants found in the uploaded file for this trait. General evidence is shown below, but no user-specific claim is made."
