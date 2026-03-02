@@ -3,7 +3,12 @@ import csv
 import json
 import re
 import traceback
+from io import BytesIO
 from pathlib import Path
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from genomics_interpreter import (
     TRAIT_DB_PATH,
     TRAITS_JSON_PATH,
@@ -23,6 +28,57 @@ except Exception:
     OpenAI = None
 BASE_DIR = Path(__file__).resolve().parent
 STUDY_PACK_DIR = BASE_DIR / "trait_study_packs"
+ASSETS_DIR = BASE_DIR / "assets"
+VIVAGENE_LOGO_PATH = ASSETS_DIR / "vivagene_logo.svg"
+
+
+def sanitize_svg(svg: str) -> str:
+    if not isinstance(svg, str):
+        return ""
+    cleaned = re.sub(r"<\?xml[^>]*\?>", "", svg, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<!DOCTYPE[^>]*>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<script[\s\S]*?</script>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<foreignObject[\s\S]*?</foreignObject>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s(on\w+)\s*=\s*\"[^\"]*\"", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s(on\w+)\s*=\s*'[^']*'", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s(xlink:href|href)\s*=\s*\"https?://[^\"]*\"", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s(xlink:href|href)\s*=\s*'https?://[^']*'", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"javascript:", "", cleaned, flags=re.IGNORECASE)
+    if "<svg" not in cleaned.lower():
+        return ""
+    return cleaned.strip()
+
+
+def load_svg_safe(path: str) -> str:
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+        return sanitize_svg(raw)
+    except Exception:
+        return ""
+
+
+def safe_html(html: str):
+    if html is None:
+        html = ""
+    if not isinstance(html, str):
+        html = str(html)
+    st.markdown(html.strip(), unsafe_allow_html=True)
+
+
+def begin_page_wrap():
+    safe_html(f"<div class='page-wrap' data-k='{st.session_state.get('page_transition_key', 0)}'>")
+
+
+def end_page_wrap():
+    safe_html("</div>")
+
+
+def render_vg_helix_svg() -> str:
+    return (
+        '<div class="vg-mark-wrap" aria-hidden="true">'
+        '<img src="vivagene_helix.png" alt="VivaGene Helix Mark"/>'
+        '</div>'
+    )
 
 def normalize_report(report_obj):
     """Ensure downstream renderers receive a dict with .get().
@@ -116,6 +172,110 @@ def build_filtered_report(report_obj, selected_traits):
     else:
         report["rag_evidence"] = {}
     return report
+
+
+def generate_pdf_report_bytes(report_obj: dict) -> bytes:
+    report = normalize_report(report_obj if isinstance(report_obj, dict) else {})
+    traits = [t for t in report.get("traits", []) if isinstance(t, dict)]
+    summary = report.get("summary", {}) if isinstance(report.get("summary", {}), dict) else {}
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("VivaGene Report", styles["Title"]))
+    story.append(Spacer(1, 6))
+    story.append(
+        Paragraph(
+            "Educational genomics insights only. This report does not provide medical advice or diagnosis.",
+            styles["BodyText"],
+        )
+    )
+    story.append(Spacer(1, 8))
+
+    cats = summary.get("categories", []) if isinstance(summary.get("categories", []), list) else []
+    coverage_vals = [float(t.get("coverage", 0.0) or 0.0) for t in traits if isinstance(t.get("coverage"), (int, float))]
+    avg_cov = (sum(coverage_vals) / len(coverage_vals)) if coverage_vals else 0.0
+    found = sum(1 for t in traits if str(t.get("evidence_status", "")).strip().lower() == "found")
+    missing = max(0, len(traits) - found)
+
+    story.append(
+        Paragraph(
+            f"Matched traits: {len(traits)} | Evidence found: {found} | Evidence missing: {missing} | Coverage: {avg_cov * 100:.0f}%",
+            styles["BodyText"],
+        )
+    )
+    story.append(Paragraph(f"Categories: {', '.join(cats) if cats else '—'}", styles["BodyText"]))
+    story.append(Spacer(1, 12))
+
+    table_data = [["Trait", "Category", "Gene/rsID", "Genotype", "Evidence"]]
+    for t in traits:
+        table_data.append(
+            [
+                str(t.get("trait_name", "")).strip() or str(t.get("trait_id", "")).strip(),
+                str(t.get("category", t.get("track", ""))).strip(),
+                f"{str(t.get('gene', '')).strip()} / {str(t.get('rsid', '')).strip()}",
+                str(t.get("user_genotype", "")).strip(),
+                str(t.get("evidence_status", "missing")).strip().capitalize(),
+            ]
+        )
+
+    table = Table(table_data, colWidths=[150, 90, 120, 85, 70], repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    story.append(table)
+    story.append(Spacer(1, 12))
+
+    for t in traits:
+        trait_name = str(t.get("trait_name", "")).strip() or str(t.get("trait_id", "Trait")).strip()
+        story.append(Paragraph(f"<b>{trait_name}</b>", styles["Heading4"]))
+        story.append(
+            Paragraph(
+                f"{str(t.get('gene', '')).strip()} · {str(t.get('rsid', '')).strip()} · Genotype {str(t.get('user_genotype', '')).strip()}",
+                styles["BodyText"],
+            )
+        )
+        story.append(
+            Paragraph(
+                f"Effect: {str(t.get('effect_label', '')).strip()} ({str(t.get('effect_level', '')).strip()}) | Evidence: {str(t.get('evidence_strength', '')).strip() or 'Emerging'}",
+                styles["BodyText"],
+            )
+        )
+        status = str(t.get("evidence_status", "missing")).strip().lower()
+        explanation = str(t.get("explanation", "")).strip()
+        citations = t.get("citations", []) if isinstance(t.get("citations", []), list) else []
+        if status == "found" and explanation:
+            story.append(Paragraph(explanation, styles["BodyText"]))
+            if citations:
+                story.append(Paragraph("Citations:", styles["BodyText"]))
+                for c in citations[:3]:
+                    if isinstance(c, dict):
+                        ident = str(c.get("identifier", "")).strip()
+                        title = str(c.get("title", "")).strip() or "Source"
+                        year = str(c.get("year", "")).strip()
+                        story.append(Paragraph(f"- {ident} | {title} {f'({year})' if year else ''}", styles["BodyText"]))
+        else:
+            story.append(
+                Paragraph(
+                    "Evidence not found in the local corpus yet. This trait will display citations once the study pack is expanded.",
+                    styles["BodyText"],
+                )
+            )
+        story.append(Spacer(1, 8))
+
+    doc.build(story)
+    return buffer.getvalue()
 
 
 def is_dev_mode():
@@ -634,6 +794,25 @@ st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    html {
+        scroll-behavior: smooth;
+    }
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+        background: rgba(2, 6, 23, 0.25);
+    }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(148,163,184,0.35);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(56,189,248,0.55);
+    }
     :root {
         --bg-dark: #020617;
         --bg-main: #020617;
@@ -673,10 +852,48 @@ st.markdown(
         margin-bottom: 6px;
     }
 
+    .top-nav-shell {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        background: rgba(2, 6, 23, 0.55);
+        border-bottom: 1px solid rgba(148,163,184,0.15);
+        margin: 0 -1rem 0.8rem;
+        padding: 0.35rem 1rem;
+    }
+
     .top-nav-left {
         display: flex;
         align-items: center;
         gap: 10px;
+    }
+
+    .nav-logo-container {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .logo-title {
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        font-size: 1.05rem;
+        text-transform: uppercase;
+    }
+
+    .logo-sub {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin-top: -4px;
+    }
+
+    .nav-button-container {
+        display: flex;
+        justify-content: flex-end;
+        gap: 20px;
+        padding-top: 8px;
     }
 
     /* G shaped DNA style mark */
@@ -770,13 +987,14 @@ st.markdown(
         font-weight: 500;
         border-bottom: 2px solid transparent;
         border-radius: 0;
-        transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     }
 
     .stButton>button:hover {
         color: #ffffff; /* pure white on hover */
         border-bottom-color: #38bdf8;
         transform: translateY(-1px);
+        box-shadow: 0 8px 24px rgba(56,189,248,0.16), inset 0 -1px 0 rgba(56,189,248,0.55);
         cursor: pointer;
     }
 
@@ -882,42 +1100,21 @@ st.markdown(
         margin-bottom: 12px;
     }
 
-    .dna-helix {
-        position: relative;
-        height: 180px;
-        margin-top: 4px;
+    .vg-mark-wrap {
+        height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
-    .dna-strand {
-        position: absolute;
-        width: 2px;
-        height: 100%;
-        border-radius: 999px;
-        left: 50%;
-        transform: translateX(-26px);
-        background: linear-gradient(180deg, #3b82f6, #f97316);
+    .hero-dna-card img {
+        max-height: 240px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 20px rgba(80, 140, 255, 0.45));
+        margin-top: 8px;
+        width: 100%;
+        display: block;
     }
-
-    .dna-strand:nth-child(2) {
-        transform: translateX(26px);
-        background: linear-gradient(180deg, #8b5cf6, #22c55e);
-    }
-
-    .dna-rung {
-        position: absolute;
-        width: 64px;
-        height: 2px;
-        background: rgba(148, 163, 184, 0.7);
-        left: 50%;
-        transform: translateX(-50%);
-        border-radius: 999px;
-    }
-
-    .dna-rung:nth-child(3) { top: 12%; }
-    .dna-rung:nth-child(4) { top: 28%; }
-    .dna-rung:nth-child(5) { top: 44%; }
-    .dna-rung:nth-child(6) { top: 60%; }
-    .dna-rung:nth-child(7) { top: 76%; }
 
     /* GENERAL SECTIONS */
 
@@ -990,8 +1187,8 @@ st.markdown(
     }
 
     .feature-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 24px rgba(148,163,184,0.35);
+        transform: translateY(-4px);
+        box-shadow: 0 18px 36px rgba(15,23,42,0.72);
         border-color: #cbd5f5;
     }
 
@@ -1365,6 +1562,169 @@ html {
     border-bottom-color: #38bdf8 !important;
     transform: translateY(-1px);
 }
+
+.logo-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    cursor: pointer;
+    transition: transform 0.16s ease, filter 0.16s ease;
+}
+
+.logo-wrap svg {
+    width: 56px;
+    height: 56px;
+    filter: drop-shadow(0 0 8px rgba(56,189,248,0.38));
+}
+
+.logo-wrap:hover {
+    transform: translateY(-1px);
+    filter: drop-shadow(0 0 14px rgba(56,189,248,0.60));
+}
+
+.scroll-cue {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 0.45rem;
+    margin-bottom: 0.6rem;
+    color: rgba(148,163,184,0.85);
+    animation: cuePulse 1.9s ease-in-out infinite;
+}
+
+.scroll-cue svg {
+    width: 18px;
+    height: 18px;
+    filter: drop-shadow(0 0 6px rgba(56,189,248,0.45));
+}
+
+@keyframes cuePulse {
+    0%, 100% { opacity: 0.35; transform: translateY(0px); }
+    50% { opacity: 0.95; transform: translateY(5px); }
+}
+
+div[data-testid="stChatMessage"] {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+div[data-testid="stChatMessage"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 22px rgba(15,23,42,0.35);
+}
+
+@media (max-width: 800px) {
+    .scroll-cue {
+        display: none;
+    }
+}
+
+/* Premium dark theme overrides (final layer) */
+:root {
+    --bg-main: #050617;
+    --bg-2: #070A22;
+    --bg-3: #0B1035;
+    --panel: rgba(17, 24, 39, 0.55);
+    --text-main: #EAF0FF;
+    --text-muted: rgba(226,232,240,0.72);
+    --border: rgba(148,163,184,0.22);
+    --accent-cyan: #38BDF8;
+    --accent-violet: #A78BFA;
+    --accent-blue: #60A5FA;
+}
+
+body, [data-testid="stAppViewContainer"] {
+    background:
+      radial-gradient(circle at 10% 0%, #101A4A 0%, transparent 45%),
+      radial-gradient(circle at 90% 20%, rgba(167,139,250,0.20) 0%, transparent 40%),
+      linear-gradient(180deg, #050617, #050617) !important;
+    color: var(--text-main) !important;
+    line-height: 1.55;
+}
+
+.hero-band {
+    background: radial-gradient(circle at 0% 0%, rgba(18,27,74,0.75), rgba(5,6,23,0.96) 50%) !important;
+}
+
+.hero-title {
+    font-size: 2.62rem;
+}
+
+.hero-sub, .hero-note, .section-sub, .logo-sub, .feature-label, .roadmap-label {
+    color: var(--text-muted) !important;
+}
+
+.feature-card, .how-step, .bio-card, .who-card, .section-light, .newsletter-modal, .how-band {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-main) !important;
+}
+
+.feature-card *, .how-step *, .bio-card *, .who-card *, .section-light *, .newsletter-modal *, .how-band * {
+    color: var(--text-main) !important;
+}
+
+.feature-body, .bio-role {
+    color: var(--text-muted) !important;
+}
+
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus,
+[data-testid="stSelectbox"] div:focus-within {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.38) !important;
+    border-color: rgba(56,189,248,0.5) !important;
+}
+
+.pipeline-diagram {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.8rem;
+}
+
+.pipeline-flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 0.7rem;
+    position: relative;
+}
+
+.pipeline-flow::before {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: 6%;
+    right: 6%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(56,189,248,0.10), rgba(167,139,250,0.55), rgba(96,165,250,0.10));
+    z-index: 0;
+}
+
+.pipe-step {
+    position: relative;
+    z-index: 1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.8rem;
+}
+
+.pipe-icon {
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+    opacity: 0.95;
+}
+
+@media (max-width: 900px) {
+    .pipeline-flow {
+        grid-template-columns: 1fr 1fr;
+    }
+    .pipeline-flow::before {
+        display: none;
+    }
+}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1384,130 +1744,39 @@ def set_page(page_name: str):
     st.session_state.page_transition_key += 1
 
 # ---------- TOP NAV BAR ----------
+safe_html("<div class='top-nav-shell'>")
 with st.container():
     col_left, col_right = st.columns([1.4, 1.6])
 
     with col_left:
-        st.markdown(
-            """
-            <style>
-            .nav-logo-container {
-                display: flex;
-                align-items: center;
-                gap: 14px;
-            }
-            .logo-title {
-                font-weight: 700;
-                letter-spacing: 0.12em;
-                font-size: 1.05rem;
-                text-transform: uppercase;
-            }
-            .logo-sub {
-                font-size: 0.75rem;
-                color: #9ca3af;
-                margin-top: -4px;
-            }
-            .nav-button-container {
-                display: flex;
-                justify-content: flex-end;
-                gap: 20px;
-                padding-top: 8px;
-            }
-            .nav-btn {
-    background: transparent !important;
-    border: none !important;
-    font-size: 0.95rem !important;
-    color: #e5e7eb !important;              /* light text on dark nav */
-    border-bottom: 2px solid transparent !important;
-    padding-bottom: 4px !important;
-}
+        logo_svg = load_svg_safe(str(VIVAGENE_LOGO_PATH))
+        if logo_svg:
+            try:
+                safe_html(f"<div class='brand-logo logo-wrap'>{logo_svg}</div>")
+            except Exception:
+                st.image("genai_logo.png", width=52)
+                if not st.session_state.get("_logo_fallback_warned", False):
+                    st.warning("Logo SVG rendering fallback active.")
+                    st.session_state["_logo_fallback_warned"] = True
+        else:
+            st.image("genai_logo.png", width=52)
+            if not st.session_state.get("_logo_fallback_warned", False):
+                st.warning("Logo SVG could not be loaded. Using fallback icon.")
+                st.session_state["_logo_fallback_warned"] = True
 
-.nav-btn:hover {
-    color: #ffffff !important;              /* bright white on hover */
-    border-bottom-color: #38bdf8 !important; /* cyan underline */
-    transform: translateY(-1px);
-}
-
-.nav-btn-active {
-    background: transparent !important;
-    color: #ffffff !important;              /* active tab always bright */
-    border-bottom: 2px solid #3b82f6 !important; /* blue underline */
-    padding-bottom: 4px !important;
-transition: color 0.16s ease, border-bottom-color 0.16s ease,
-                transform 0.16s ease;
-}
-
-/* G Helix rotating DNA mark */
-.g-helix-orbit {
-    width: 70px;
-    height: 70px;
-    border-radius: 50%;
-    position: relative;
-    border: 1px solid rgba(148, 163, 184, 0.6);
-    box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: helix-rotate 4.5s linear infinite;
-    background: radial-gradient(circle at 30% 30%, rgba(56, 189, 248, 0.3), transparent 55%);
-}
-
-.g-helix-strand {
-    position: absolute;
-    width: 2px;
-    height: 80%;
-    border-radius: 999px;
-    background: linear-gradient(to bottom, #38bdf8, #a855f7);
-    opacity: 0.95;
-}
-
-.g-helix-strand-left {
-    transform: rotate(18deg) translateX(-7px);
-}
-
-.g-helix-strand-right {
-    transform: rotate(-18deg) translateX(7px);
-}
-
-.g-helix-rung {
-    position: absolute;
-    width: 26px;
-    height: 2px;
-    border-radius: 999px;
-    background: linear-gradient(to right, #38bdf8, #a855f7);
-    opacity: 0.9;
-}
-
-.g-helix-rung.rung-1 { top: 18%; }
-.g-helix-rung.rung-2 { top: 35%; }
-.g-helix-rung.rung-3 { top: 55%; }
-.g-helix-rung.rung-4 { top: 72%; }
-
-@keyframes helix-rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.image("genai_logo.png", width=58)
-
-        st.markdown(
+        safe_html(
             """
             <div class="nav-logo-container">
                 <div>
                     <div class="logo-title">VIVAGENE</div>
-                    <div class="logo-sub">Genomics, explained with evidence.</div>
+                    <div class="logo-sub">Evidence-first genomics, clearly explained.</div>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     with col_right:
-        st.markdown("<div class='nav-button-container'>", unsafe_allow_html=True)
+        safe_html("<div class='nav-button-container'>")
         pages = ["Home", "Upload & Report", "Lifestyle Q&A", "Trait Explorer", "Trait Science", "About", "Contact"]
         labels = ["Home", "Upload", "Lifestyle Q&A", "Trait explorer", "Trait science", "About", "Contact"]
         if str(os.environ.get("SHOW_VALIDATION", "0")).strip() == "1":
@@ -1520,15 +1789,13 @@ transition: color 0.16s ease, border-bottom-color 0.16s ease,
                 set_page(p)
                 st.rerun()
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        safe_html("</div>")
+safe_html("</div>")
 
 page = st.session_state.active_page
 
 # Wrapper to trigger CSS animation on page change
-st.markdown(
-    f"<div class='page-wrap' data-k='{st.session_state.page_transition_key}'>",
-    unsafe_allow_html=True,
-)
+begin_page_wrap()
               
            
 # ---------- Newsletter state ----------
@@ -1549,7 +1816,8 @@ def newsletter_block(location_text: str):
             "<div class='newsletter-modal'>"
             "<div class='newsletter-title'>Join the VivaGene early access list</div>"
             "<div class='newsletter-sub'>Get updates as the platform evolves and, in a full launch, "
-            "receive your reports securely by email.</div>",
+            "receive your reports securely by email.</div>"
+            "</div>",
             unsafe_allow_html=True,
         )
         cols = st.columns([3, 1])
@@ -1563,7 +1831,7 @@ def newsletter_block(location_text: str):
                     st.session_state.hide_newsletter = True
                 else:
                     st.warning("Please enter an email.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("", unsafe_allow_html=False)
 
 
 # ---------- Trait DB helper ----------
@@ -1753,38 +2021,29 @@ def get_trait_db_stats(path_json: str):
 # ---------- HOME ----------
 if page == "Home":
     st.markdown(
-        """
+        f"""
         <div class="hero-band">
           <div class="hero-grid">
             <div>
-              <div class="hero-chip">Evidence-first Genomics</div>
+              <div class="hero-chip">Evidence-first genomics</div>
               <div class="hero-title">
-                Understand your genetics with <span>clarity.</span>
+                Genetics, translated for <span>everyday clarity.</span>
               </div>
               <div class="hero-sub">
-                VivaGene translates raw genotype files into structured trait signals and plain-language explanations grounded in citations.
-                It is designed for careful educational use and clear communication of confidence and coverage.
+                VivaGene turns raw genotype files into research-backed trait summaries with clear language, confidence signals,
+                and citation transparency.
               </div>
               <div class="hero-note">
-                VivaGene currently supports a curated trait panel across Nutrition, Neurobehavior, and Fitness.
-                Every explanation is linked to evidence and shown with confidence + coverage. Genes are not destiny.
+                Our current trait panel covers Nutrition, Neurobehavior, and Fitness. Results are educational, cautious, and designed
+                to make complex genomics easier to understand. Genes are one input, not a destiny.
               </div>
             </div>
             <div class="hero-dna-card">
-              <div class="hero-dna-title">Evidence-first Genomics</div>
+              <div class="hero-dna-title">VG Helix Signature</div>
               <div class="hero-dna-sub">
-                A lightweight variant interpreter feeds a language model that explains patterns
-                in clear language while keeping the underlying science visible.
+                The VivaGene mark stays fixed while the internal DNA rotates, representing stable structure with evolving evidence.
               </div>
-              <div class="dna-helix">
-                <div class="dna-strand"></div>
-                <div class="dna-strand"></div>
-                <div class="dna-rung"></div>
-                <div class="dna-rung"></div>
-                <div class="dna-rung"></div>
-                <div class="dna-rung"></div>
-                <div class="dna-rung"></div>
-              </div>
+              {render_vg_helix_svg()}
             </div>
           </div>
         </div>
@@ -1795,14 +2054,23 @@ if page == "Home":
     # Primary CTAs under hero
     cta_col1, cta_col2 = st.columns([0.4, 0.4])
     with cta_col1:
-        if st.button("Generate your report", key="hero_start_report"):
+        if st.button("Create your VivaGene report", key="hero_start_report"):
             st.session_state.active_page = "Upload & Report"
     with cta_col2:
-        if st.button("Try Lifestyle Q&A", key="hero_chatbot"):
+        if st.button("Open Lifestyle Q&A", key="hero_chatbot"):
             st.session_state.active_page = "Lifestyle Q&A"
+    st.markdown(
+        """
+        <div class="scroll-cue" aria-hidden="true">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Why VivaGene exists
-    st.markdown('<div class="home-section dark-section">', unsafe_allow_html=True)
     col_left, col_right = st.columns([1.4, 1.0])
 
     with col_left:
@@ -1818,13 +2086,11 @@ if page == "Home":
 
     with col_right:
         newsletter_block("home")
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # Why choose VivaGene
-    st.markdown('<div class="home-section dark-section">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Why choose VivaGene?</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-sub">A focused, lifestyle aware, education first platform instead of a generic consumer report.</div>',
+        '<div class="section-sub">A calm, evidence-first experience for people who want understandable genetics without overclaiming.</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -1834,40 +2100,36 @@ if page == "Home":
             <div class="feature-label">Founder story</div>
             <div class="feature-title">Designed by a future AI geneticist</div>
             <div class="feature-body">
-              VivaGene is led by Anjali, a high school student who plans to work at the intersection of genetics,
-              AI, and clinical decision making. The project reflects real experience in rare disease research and
-              clinical volunteering, translated into a tool that explains DNA in a calm and structured way.
+              Built by Anjali Nalla, VivaGene combines student-led research training with a practical focus on clear,
+              responsible genomic communication.
             </div>
           </div>
           <div class="feature-card">
             <div class="feature-label">Transparent</div>
             <div class="feature-title">Every trait is traceable</div>
             <div class="feature-body">
-              Under the hood is a curated trait table. Each interpretation links to specific rsIDs and genes,
-              rather than opaque risk scores, so you can always see the structure behind the narrative.
+              Trait outputs are linked to rsIDs, genes, confidence, and citations so each summary has a visible evidence path.
             </div>
           </div>
           <div class="feature-card">
             <div class="feature-label">Lifestyle focus</div>
             <div class="feature-title">DNA as one piece of the puzzle</div>
             <div class="feature-body">
-              The goal is not to label you. It is to highlight patterns that might interact with sleep, nutrition,
-              attention, or training, always framed as possibilities and ideas, never as prescriptions.
+              Results are framed as tendencies that may interact with sleep, nutrition, focus, and training.
+              They are educational and never a diagnosis.
             </div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # How it works
-    st.markdown('<div class="home-section">', unsafe_allow_html=True)
     st.markdown(
         """
         <div class="how-band">
           <div class="how-label">How it works</div>
-          <div class="how-title">From raw file to a lifestyle aware report.</div>
+          <div class="how-title">From raw file to a clear, citation-aware trait report.</div>
           <div class="how-row">
             <div class="how-step">
               <div class="how-step-number">01</div>
@@ -1890,13 +2152,19 @@ if page == "Home":
               <div>Explore a printable HTML report with trait cards, explanations, and caveats that you can revisit over time.</div>
             </div>
           </div>
+          <div class="pipeline-diagram">
+            <div class="pipeline-flow">
+              <div class="pipe-step"><div class="pipe-icon">⬆</div><div>Upload genotype</div></div>
+              <div class="pipe-step"><div class="pipe-icon">🧬</div><div>Match curated variants</div></div>
+              <div class="pipe-step"><div class="pipe-icon">📚</div><div>Bind to evidence</div></div>
+              <div class="pipe-step"><div class="pipe-icon">✨</div><div>Generate plain-language summary</div></div>
+            </div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="home-section">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">How VivaGene stays trustworthy</div>', unsafe_allow_html=True)
     st.markdown(
         """
@@ -1907,7 +2175,6 @@ if page == "Home":
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # Secondary CTA near How it works
     spacer_left, cta_mid, spacer_right = st.columns([0.35, 0.3, 0.35])
@@ -1916,7 +2183,6 @@ if page == "Home":
             st.session_state.active_page = "Upload & Report"
 
     # Founder profile / Who this is for / Roadmap
-    st.markdown('<div class="home-section dark-section">', unsafe_allow_html=True)
     col_a, col_b, col_c = st.columns([1.2, 1.2, 1.1])
 
     with col_a:
@@ -1995,10 +2261,8 @@ if page == "Home":
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # Safety, privacy, and limitations (Home)
-    st.markdown('<div class="home-section">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Safety, privacy, and limitations</div>', unsafe_allow_html=True)
     st.markdown(
         """
@@ -2010,10 +2274,8 @@ if page == "Home":
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # FAQ (Home - short)
-    st.markdown('<div class="home-section">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Quick questions</div>', unsafe_allow_html=True)
     st.markdown(
         """
@@ -2028,7 +2290,6 @@ if page == "Home":
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("</div>", unsafe_allow_html=True)
 
 elif page == "Upload & Report":
     st.markdown('<div class="section-title">Generate a personal trait report</div>', unsafe_allow_html=True)
@@ -2089,154 +2350,204 @@ elif page == "Upload & Report":
         if generate:
             if not uploaded:
                 st.warning("Please upload a raw genotype .txt file first.")
-                st.stop()
+            else:
+                temp_path = BASE_DIR / "uploaded_genome.txt"
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded.getvalue())
+                genotype_path = str(temp_path)
 
-            temp_path = BASE_DIR / "uploaded_genome.txt"
-            with open(temp_path, "wb") as f:
-                f.write(uploaded.getvalue())
-            genotype_path = str(temp_path)
-
-            try:
-                report = build_prs_report_from_upload(
-                    genotype_path=genotype_path,
-                    categories_selected=categories_selected,
-                    include_optional_liver=include_optional_liver,
-                    red_flag_only=red_flag_only,
-                )
-                report = normalize_report(report)
-                if not isinstance(report, dict):
-                    raise ValueError("Report generation failed: expected a dict report object.")
-                report = attach_rag_evidence_to_report(report)
-
-                # Save for chatbot
-                st.session_state.last_report = report
-
-                if not report.get("traits"):
-                    st.warning("No traits were matched. Check that the file uses the expected rsIDs and genotypes.")
-                else:
-                    major_traits = sort_traits_for_display(report.get("traits_major", []))
-                    selected_traits = sort_traits_for_display(report.get("traits", []))
-                    filtered_report = build_filtered_report(report, selected_traits)
-                    major_only_report = build_filtered_report(report, major_traits if major_traits else selected_traits)
-
-                    enriched_traits = [dict(t) for t in selected_traits if isinstance(t, dict)]
-
-                    filtered_report = build_filtered_report(report, enriched_traits)
-
-                    trust_summary = report.get("trust_summary", {}) if isinstance(report.get("trust_summary", {}), dict) else {}
-                    if int(trust_summary.get("traits_refused", 0) or 0) > 0:
-                        st.warning(
-                            "Some traits could not be explained because the evidence corpus does not yet contain sufficient supporting snippets. This is intentional to prevent unsupported claims."
-                        )
-
-                    summary_lines = []
-                    for t in enriched_traits:
-                        if not isinstance(t, dict):
-                            continue
-                        title = str(t.get("trait_name", "")).strip()
-                        life = str(t.get("explanation", "")).strip()
-                        if title and life:
-                            summary_lines.append(f"- {title}: {life}")
-                    st.session_state.last_ai_summary = "\n".join(summary_lines[:8])
-
-                    cats = report.get("summary", {}).get("categories", []) if isinstance(report.get("summary", {}), dict) else []
-                    n_traits = int(report.get("summary", {}).get("num_traits_found", len(enriched_traits)) or len(enriched_traits))
-                    cov_vals = [float(t.get("coverage", 0.0) or 0.0) for t in enriched_traits if isinstance(t, dict) and isinstance(t.get("coverage", None), (int, float))]
-                    cov_txt = f"{(sum(cov_vals) / len(cov_vals)) * 100:.0f}%" if cov_vals else "—"
-                    st.markdown("### Your VivaGene Trait Summary")
-                    st.caption(
-                        f"Categories: {', '.join(cats) if cats else '—'} · Traits found: {n_traits} · Coverage: {cov_txt}"
+                try:
+                    report = build_prs_report_from_upload(
+                        genotype_path=genotype_path,
+                        categories_selected=categories_selected,
+                        include_optional_liver=include_optional_liver,
+                        red_flag_only=red_flag_only,
                     )
+                    report = normalize_report(report)
+                    if not isinstance(report, dict):
+                        raise ValueError("Report generation failed: expected a dict report object.")
+                    report = attach_rag_evidence_to_report(report)
 
-                    st.markdown("### Evidence-based overview")
-                    st.caption("This overview is educational. It does not diagnose disease or replace medical care.")
+                    # Save for chatbot
+                    st.session_state.last_report = report
 
-                    st.markdown("### Trait cards")
-                    traits_by_category = {}
-                    for t in enriched_traits:
-                        cat = t.get("category", t.get("track", "General"))
-                        traits_by_category.setdefault(cat, []).append(t)
+                    if not report.get("traits"):
+                        st.warning("No traits were matched. Check that the file uses the expected rsIDs and genotypes.")
+                    else:
+                        selected_traits = sort_traits_for_display(report.get("traits", []))
+                        enriched_traits = [dict(t) for t in selected_traits if isinstance(t, dict)]
+                        filtered_report = build_filtered_report(report, enriched_traits)
 
-                    for category in sorted(traits_by_category.keys()):
-                        st.markdown(f"#### {category}")
-                        for trait in traits_by_category.get(category, []):
-                            with st.container():
-                                trait_name = trait.get("trait_name", trait.get("trait_id", "Trait"))
-                                gene = trait.get("gene", "")
-                                rsid = trait.get("rsid", "")
-                                genotype = trait.get("user_genotype", "")
-                                effect_label = trait.get("effect_label", "")
-                                effect_level = trait.get("effect_level", "")
-                                evidence_strength = trait.get("evidence_strength", "")
-                                life_impact = trait.get("explanation", "") or "Insufficient evidence in the local corpus to explain this trait yet."
-                                citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
-                                trust = trait.get("trust", {}) if isinstance(trait.get("trust", {}), dict) else {}
+                        trust_summary = report.get("trust_summary", {}) if isinstance(report.get("trust_summary", {}), dict) else {}
+                        if int(trust_summary.get("traits_refused", 0) or 0) > 0:
+                            st.warning(
+                                "Some traits could not be explained because the evidence corpus does not yet contain sufficient supporting snippets. This is intentional to prevent unsupported claims."
+                            )
 
-                                st.markdown(f"**{trait_name}**")
-                                st.caption(f"Category: {category}")
-                                st.caption(f"{gene} · {rsid} · Genotype {genotype}")
-                                st.markdown(
-                                    f"Effect: **{effect_label or 'Observed variant'}** "
-                                    f"`{str(effect_level or 'Unknown').upper()}`"
-                                )
-                                st.write(life_impact)
-                                st.caption(f"Evidence level: {evidence_strength or 'Emerging'}")
-                                if trust:
-                                    cov = trust.get("coverage", trait.get("coverage", None))
-                                    cov_txt = f"{float(cov) * 100:.0f}%" if isinstance(cov, (int, float)) else "n/a"
-                                    st.caption(
-                                        f"Trust Panel · Bucket: {trust.get('bucket', effect_level)} · "
-                                        f"Confidence: {trust.get('confidence', trait.get('confidence', 'Low'))} · "
-                                        f"Coverage: {cov_txt} · Evidence quality: {trust.get('evidence_quality', 'Low')}"
-                                    )
-                                    bias_note = str(trust.get("bias_note", "")).strip()
-                                    if bias_note:
-                                        st.caption(f"Bias note: {bias_note}")
-                                with st.expander("Evidence & citations"):
-                                    if citations:
-                                        st.markdown("Sources:")
-                                        for c in citations[:5]:
-                                            if isinstance(c, dict):
-                                                title_c = str(c.get("title", "")).strip() or str(c.get("source", "")).strip() or "Source"
-                                                year_c = str(c.get("year", "")).strip()
-                                                source_c = str(c.get("journal", "")).strip() or str(c.get("source", "")).strip()
-                                                if not source_c:
-                                                    url_c = str(c.get("url", "")).strip()
-                                                    if url_c:
-                                                        source_c = url_c.split("/")[2] if "://" in url_c and len(url_c.split("/")) > 2 else url_c
-                                                year_bit = f" ({year_c})" if year_c else ""
-                                                tail = f" — {source_c}" if source_c else ""
-                                                st.markdown(f"- {title_c}{year_bit}{tail}")
-                                            else:
-                                                text_c = str(c).strip()
-                                                if "://" in text_c:
-                                                    parts = text_c.split("/")
-                                                    domain = parts[2] if len(parts) > 2 else text_c
-                                                    st.markdown(f"- {domain}")
-                                                else:
-                                                    st.markdown(f"- {text_c}")
-                                    else:
-                                        st.write("No paper retrieved for this trait yet.")
+                        summary_lines = []
+                        for t in enriched_traits:
+                            if not isinstance(t, dict):
+                                continue
+                            title = str(t.get("trait_name", "")).strip()
+                            life = str(t.get("explanation", "")).strip()
+                            if title and life:
+                                summary_lines.append(f"- {title}: {life}")
+                        st.session_state.last_ai_summary = "\n".join(summary_lines[:8])
 
-                    text_report = generate_text_report(filtered_report)
-
-                    with st.expander("View technical text summary"):
-                        st.text(text_report)
-
-                    st.markdown("### Detailed trait report")
-                    html_report = generate_html_report(filtered_report, ai_summary=None)
-                    st.components.v1.html(html_report, height=850, scrolling=True)
-
-                    if email_for_result.strip():
-                        st.info(
-                            f"In a future deployed version, this report could also be sent securely to {email_for_result.strip()} "
-                            "from a VivaGene email address."
+                        cats = report.get("summary", {}).get("categories", []) if isinstance(report.get("summary", {}), dict) else []
+                        n_traits = int(report.get("summary", {}).get("num_traits_found", len(enriched_traits)) or len(enriched_traits))
+                        cov_vals = [float(t.get("coverage", 0.0) or 0.0) for t in enriched_traits if isinstance(t, dict) and isinstance(t.get("coverage", None), (int, float))]
+                        cov_txt = f"{(sum(cov_vals) / len(cov_vals)) * 100:.0f}%" if cov_vals else "—"
+                        evidence_found = sum(1 for t in enriched_traits if str(t.get("evidence_status", "")).strip().lower() == "found")
+                        evidence_missing = max(0, len(enriched_traits) - evidence_found)
+                        st.markdown("### Your VivaGene Trait Summary")
+                        st.caption(
+                            f"Categories: {', '.join(cats) if cats else '—'} · Traits found: {n_traits} · Coverage: {cov_txt}"
+                        )
+                        st.caption(
+                            f"Matched traits: {len(enriched_traits)} · Evidence found: {evidence_found} · Evidence missing: {evidence_missing} · Coverage: {cov_txt}"
                         )
 
-            except Exception as e:
-                st.error(f"Something went wrong while generating the report: {e}")
-                with st.expander("Debug traceback"):
-                    st.code(traceback.format_exc(), language="text")
+                        st.markdown("### Evidence-based overview")
+                        st.caption("This overview is educational. It does not diagnose disease or replace medical care.")
+
+                        st.markdown("### Trait cards")
+                        traits_by_category = {}
+                        for t in enriched_traits:
+                            cat = t.get("category", t.get("track", "General"))
+                            traits_by_category.setdefault(cat, []).append(t)
+
+                        for category in sorted(traits_by_category.keys()):
+                            st.markdown(f"#### {category}")
+                            for trait in traits_by_category.get(category, []):
+                                with st.container():
+                                    trait_name = trait.get("trait_name", trait.get("trait_id", "Trait"))
+                                    gene = trait.get("gene", "")
+                                    rsid = trait.get("rsid", "")
+                                    genotype = trait.get("user_genotype", "")
+                                    effect_label = trait.get("effect_label", "")
+                                    effect_level = trait.get("effect_level", "")
+                                    evidence_strength = trait.get("evidence_strength", "")
+                                    evidence_status = str(trait.get("evidence_status", "missing")).strip().lower()
+                                    life_impact = str(trait.get("explanation", "")).strip()
+                                    citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
+                                    evidence_snippets = trait.get("evidence_snippets", []) if isinstance(trait.get("evidence_snippets", []), list) else []
+                                    trust = trait.get("trust", {}) if isinstance(trait.get("trust", {}), dict) else {}
+
+                                    st.markdown(f"**{trait_name}**")
+                                    st.caption(f"Category: {category}")
+                                    st.caption(f"{gene} · {rsid} · Genotype {genotype}")
+                                    st.markdown(
+                                        f"Effect: **{effect_label or 'Observed variant'}** "
+                                        f"`{str(effect_level or 'Unknown').upper()}`"
+                                    )
+                                    if evidence_status == "found":
+                                        st.markdown(
+                                            "<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:#16653433;color:#dcfce7;border:1px solid #22c55e;'>✅ Evidence Found</span>",
+                                            unsafe_allow_html=True,
+                                        )
+                                    else:
+                                        st.markdown(
+                                            "<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:#a1620733;color:#fde68a;border:1px solid #f59e0b;'>⚠️ Evidence Missing</span>",
+                                            unsafe_allow_html=True,
+                                        )
+                                    if evidence_status == "found" and life_impact and len(citations) >= 1:
+                                        st.write(life_impact)
+                                    else:
+                                        life_impact = ""
+                                        st.info("Evidence not found in the local corpus yet. This trait will display citations once the study pack is expanded.")
+                                    st.caption(f"Evidence level: {evidence_strength or 'Emerging'}")
+                                    if trust:
+                                        cov = trust.get("coverage", trait.get("coverage", None))
+                                        cov_txt = f"{float(cov) * 100:.0f}%" if isinstance(cov, (int, float)) else "n/a"
+                                        st.caption(
+                                            f"Trust Panel · Bucket: {trust.get('bucket', effect_level)} · "
+                                            f"Confidence: {trust.get('confidence', trait.get('confidence', 'Low'))} · "
+                                            f"Coverage: {cov_txt} · Evidence quality: {trust.get('evidence_quality', 'Low')}"
+                                        )
+                                        bias_note = str(trust.get("bias_note", "")).strip()
+                                        if bias_note:
+                                            st.caption(f"Bias note: {bias_note}")
+                                    with st.expander("Evidence & citations"):
+                                        if evidence_status == "found" and citations:
+                                            st.markdown("Sources:")
+                                            for c in citations[:3]:
+                                                if isinstance(c, dict):
+                                                    label_c = str(c.get("label", "")).strip()
+                                                    title_c = str(c.get("title", "")).strip() or str(c.get("source", "")).strip() or "Source"
+                                                    year_c = str(c.get("year", "")).strip()
+                                                    ident_c = str(c.get("identifier", "")).strip()
+                                                    url_c = str(c.get("source_url", c.get("url", ""))).strip()
+                                                    source_c = str(c.get("journal", "")).strip() or str(c.get("source", "")).strip() or ""
+                                                    if not source_c and url_c:
+                                                        source_c = url_c.split("/")[2] if "://" in url_c and len(url_c.split("/")) > 2 else url_c
+                                                    year_bit = f" ({year_c})" if year_c else ""
+                                                    lead = f"[{label_c}] " if label_c else ""
+                                                    tail = f" — {ident_c}" if ident_c else ""
+                                                    source_tail = f" · {source_c}" if source_c else ""
+                                                    st.markdown(f"- {lead}{title_c}{year_bit}{tail}{source_tail}")
+                                                else:
+                                                    text_c = str(c).strip()
+                                                    if "://" in text_c:
+                                                        parts = text_c.split("/")
+                                                        domain = parts[2] if len(parts) > 2 else text_c
+                                                        st.markdown(f"- {domain}")
+                                                    else:
+                                                        st.markdown(f"- {text_c}")
+                                        else:
+                                            st.write("No paper retrieved for this trait yet.")
+                                        if evidence_snippets and evidence_status == "found":
+                                            st.caption(f"Retrieved snippets: {len(evidence_snippets)}")
+
+                        # Runtime integrity checks
+                        rendered_count = sum(len(v) for v in traits_by_category.values())
+                        if rendered_count != len(enriched_traits):
+                            st.warning(
+                                f"Integrity check: rendered trait cards ({rendered_count}) do not match matched traits ({len(enriched_traits)})."
+                            )
+                        bad_claim_traits = [
+                            t.get("trait_id", t.get("trait_name", "Trait"))
+                            for t in enriched_traits
+                            if str(t.get("evidence_status", "")).strip().lower() == "missing" and str(t.get("explanation", "")).strip()
+                        ]
+                        if bad_claim_traits:
+                            st.warning(
+                                "Integrity check: missing-evidence traits contained explanation text; hidden in UI to avoid unsupported claims."
+                            )
+
+                        text_report = generate_text_report(filtered_report)
+
+                        with st.expander("View technical text summary"):
+                            st.text(text_report)
+
+                        st.markdown("### Detailed trait report")
+                        html_report = generate_html_report(filtered_report, ai_summary=None)
+                        if html_report is None:
+                            html_report = ""
+                        if not isinstance(html_report, str):
+                            html_report = str(html_report)
+                        with st.expander("View report HTML source"):
+                            st.code(html_report, language="html")
+
+                        pdf_bytes = generate_pdf_report_bytes(filtered_report)
+                        st.download_button(
+                            label="Download PDF report",
+                            data=pdf_bytes,
+                            file_name="VivaGene_Report.pdf",
+                            mime="application/pdf",
+                            key="download_pdf_report",
+                        )
+
+                        if email_for_result.strip():
+                            st.info(
+                                f"In a future deployed version, this report could also be sent securely to {email_for_result.strip()} "
+                                "from a VivaGene email address."
+                            )
+
+                except Exception as e:
+                    st.error(f"Something went wrong while generating the report: {e}")
+                    with st.expander("Debug traceback"):
+                        st.code(traceback.format_exc(), language="text")
 
     with col2:
         st.markdown("#### What your report looks like")
@@ -2283,15 +2594,14 @@ elif page == "Lifestyle Q&A":
         unsafe_allow_html=True,
     )
 
-    st.markdown("#### Chatbot policy")
+    st.markdown("#### Chat policy")
     st.markdown(
         """
-        - Educational and informational only  
-        - No diagnosis or disease prediction  
-        - No medication or treatment guidance  
-        - If you mention symptoms, the chatbot will advise professional care  
-        - Uses cautious language  
-        - When available, citations are shown and the bot refuses unsupported claims  
+        - Educational and informational support only  
+        - No diagnosis, disease prediction, or treatment guidance  
+        - If symptoms are discussed, it will recommend professional care  
+        - Uses cautious, non-alarmist language  
+        - Shows citations when available and refuses unsupported claims  
         """
     )
     ack = st.checkbox("I understand this is not medical advice", value=False, key="chatbot_policy_ack")
@@ -2772,7 +3082,7 @@ elif page == "Validation (Dev)" and str(os.environ.get("SHOW_VALIDATION", "0")).
                     key=f"dl_{f.name}",
                 )
 
-st.markdown("</div>", unsafe_allow_html=True)
+end_page_wrap()
 # ---------- Global footer ----------
 st.markdown(
     """

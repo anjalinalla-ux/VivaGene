@@ -1,8 +1,58 @@
 import csv
 import json
-
+import os
 from openai import OpenAI
-client = OpenAI()
+from utils.trait_quality import compute_trait_completeness, trait_has_variants
+from study_pack_loader import load_all_trait_packs, index_packs_by_id
+from genomics_polygenic import normalize_genotype as poly_normalize_genotype, compute_prs_for_trait
+from rag_retriever import load_corpus, retrieve_evidence as retrieve_local_evidence, evidence_quality
+from rag_generator import generate_trait_explanation_rag
+
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = "mistralai/mistral-7b-instruct"
+client = (
+    OpenAI(api_key=OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1")
+    if OPENROUTER_API_KEY
+    else None
+)
+
+def normalize_report(report_obj):
+    """Normalize report input so downstream code can safely use dict .get().
+
+    Accepts either a full report dict or a list of trait dicts.
+    Returns a dict with keys: summary, traits.
+    """
+    # If a list of trait dicts is passed, wrap it
+    if isinstance(report_obj, list):
+        traits = [t for t in report_obj if isinstance(t, dict)]
+        categories = sorted({t.get("category", "") for t in traits if t.get("category")})
+        return {
+            "summary": {
+                "num_traits_found": len(traits),
+                "categories": categories,
+            },
+            "traits": traits,
+        }
+
+    # If a dict is passed, ensure expected keys and types
+    if isinstance(report_obj, dict):
+        report_obj.setdefault("summary", {})
+        raw_traits = report_obj.get("traits", [])
+        traits = [t for t in raw_traits if isinstance(t, dict)] if isinstance(raw_traits, list) else []
+        report_obj["traits"] = traits
+
+        if not isinstance(report_obj["summary"], dict):
+            report_obj["summary"] = {}
+
+        report_obj["summary"].setdefault("num_traits_found", len(traits))
+        report_obj["summary"].setdefault(
+            "categories",
+            sorted({t.get("category", "") for t in traits if t.get("category")}),
+        )
+        return report_obj
+
+    # Fallback
+    return {"summary": {"num_traits_found": 0, "categories": []}, "traits": []}
 
 def generate_ai_summary(report):
     """
@@ -36,8 +86,11 @@ def generate_ai_summary(report):
         "Please follow the instructions in the system message and write the summary accordingly."
     )
 
+    if client is None:
+        return ""
+
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=OPENROUTER_MODEL,
         messages=[
             {"role": "system", "content": system_message},
             {"role": "user", "content": user_message},
@@ -48,11 +101,38 @@ def generate_ai_summary(report):
     return response.choices[0].message.content.strip()
 
 TRAIT_DB_PATH = "trait_database.csv"
+TRAITS_JSON_PATH = "data/traits.json"
 TRAIT_DB_JSON_PATH = "trait_database_model.json"
-GENOTYPE_FILE_PATH = "test_genotype.txt"
+GENOTYPE_FILE_PATH = "John_doe_genotype.txt"
+LAST_MATCH_WARNINGS = []
+LAST_DB_WARNINGS = []
+
+TRACK_SUBCATEGORY_MAP = {
+    "Nutrition": ("Nutrition", "General"),
+    "Fitness": ("Fitness", "General"),
+    "Neurobehavior": ("Neurobehavior", "General"),
+    "Sleep": ("Neurobehavior", "Sleep"),
+    "Sensory": ("Neurobehavior", "Sensory"),
+    "Appearance": ("Neurobehavior", "Appearance"),
+}
+ALLOWED_TRACKS = {"Neurobehavior", "Nutrition", "Fitness", "Liver"}
+
+LIVER_KEYWORDS = ("liver", "nafld", "fatty liver", "steatosis")
+
+
+def map_category_to_track_subcategory(category: str, trait_name: str = ""):
+    cat = (category or "").strip()
+    name = (trait_name or "").strip().lower()
+    if any(k in name for k in LIVER_KEYWORDS):
+        return ("Liver", "Fatty liver")
+    track, subcategory = TRACK_SUBCATEGORY_MAP.get(cat, ("Neurobehavior", cat or "General"))
+    if track not in ALLOWED_TRACKS:
+        track = "Neurobehavior"
+    return (track, subcategory)
 
 
 def generate_text_report(report):
+    report = normalize_report(report)
     lines = []
     lines.append("AI-READY GENETIC TRAIT SUMMARY")
     lines.append("=" * 40)
@@ -79,67 +159,187 @@ def generate_text_report(report):
 
     return "\n".join(lines)
 
-
-def load_trait_database(csv_path):
-    """Load trait definitions into a lookup dict.
-
-    Primary source: JSON model in TRAIT_DB_JSON_PATH (if present).
-    Fallback: legacy CSV at `csv_path`.
-
-    Returns:
-        dict keyed by (rsid, genotype) -> row dict with fields matching the
-        original CSV shape used by `match_traits`.
-    """
+def load_trait_database(path=TRAIT_DB_PATH, traits_json_path=TRAITS_JSON_PATH):
+    """Load trait definitions from traits.json keyed by (rsid, genotype)."""
     lookup = {}
+    LAST_DB_WARNINGS.clear()
 
-    # First, try JSON model
     try:
-        with open(TRAIT_DB_JSON_PATH, encoding="utf-8") as jf:
-            data = json.load(jf)
+        for t in load_traits_catalog(traits_json_path):
+            if not isinstance(t, dict):
+                continue
+            trait_id = (t.get("trait_id") or "").strip()
+            title = (t.get("trait_name") or t.get("title") or title_from_trait_id(trait_id)).strip()
+            track = (t.get("category") or t.get("track") or "").strip() or "Neurobehavior"
+            if track not in ALLOWED_TRACKS:
+                track = "Neurobehavior"
+            subcategory = (t.get("subcategory") or "").strip() or "General"
+            keywords = t.get("keywords", []) or t.get("mechanism_keywords", []) or []
+            if not isinstance(keywords, list):
+                keywords = []
+            variants = t.get("variants", []) or []
+            quality = t.get("_quality", compute_db_trait_completeness(t))
+            quality_label = quality.get("label") if isinstance(quality, dict) else None
 
-        for idx, tr in enumerate(data):
-            rsid = (tr.get("rsid") or "").strip()
-            genotype = (tr.get("genotype") or "").strip().upper()
-            if not rsid or not genotype:
+            if not trait_has_variants(t):
+                continue
+            if quality_label != "Ready":
                 continue
 
-            # Map JSON trait to the legacy row structure used elsewhere
-            row = {
-                "trait_id": tr.get("trait_id") or f"{rsid}_{genotype}_{idx}",
-                "trait_name": tr.get("trait_name", ""),
-                "category": tr.get("trait_category", ""),
-                "rsid": rsid,
-                "gene": tr.get("gene", ""),
-                "effect_label": tr.get("variant_effect", ""),
-                # Use explicit effect_level if present; otherwise reuse variant_effect as a label
-                "effect_level": tr.get("effect_level") or tr.get("variant_effect", ""),
-                "explanation": tr.get("explanation", ""),
-                "evidence_strength": tr.get("evidence_level", ""),
-            }
-            key = (rsid, genotype)
-            lookup[key] = row
+            for var in variants:
+                if not isinstance(var, dict):
+                    continue
+                rsid = (var.get("rsid") or "").strip()
+                gene = (var.get("gene") or "").strip()
+                evidence_strength = var.get("evidence_strength", "Moderate")
+                genotypes = var.get("genotype_effects", {}) or var.get("genotypes", {}) or {}
+                paper_seeds = var.get("paper_seeds", []) or t.get("paper_seeds", []) or t.get("citation_seeds", []) or []
+                if not isinstance(paper_seeds, list):
+                    paper_seeds = []
 
-        if lookup:
-            return lookup
+                if not rsid or not isinstance(genotypes, dict):
+                    continue
+
+                for gt, gx in genotypes.items():
+                    if not isinstance(gx, dict):
+                        continue
+                    genotype = normalize_genotype(gt)
+                    if not genotype or genotype == "--":
+                        continue
+                    if len(genotype) != 2 or not genotype.isalpha():
+                        LAST_DB_WARNINGS.append(
+                            f"Skipped unsupported database genotype format '{gt}' for {rsid}."
+                        )
+                        continue
+                    row = {
+                        "trait_id": trait_id or f"{track}_{subcategory}_{title}_{rsid}_{genotype}",
+                        "trait_name": title,
+                        "track": track,
+                        "subcategory": subcategory,
+                        "category": track,  # compatibility for existing renderers
+                        "rsid": rsid,
+                        "gene": gene,
+                        "genotype": genotype,
+                        "effect_label": gx.get("effect_label", ""),
+                        "effect_level": gx.get("effect_level", ""),
+                        "explanation": gx.get("explanation", ""),
+                        "keywords": keywords,
+                        "paper_seeds": paper_seeds,
+                        "priority": t.get("priority", "Standard"),
+                        "flag_level": t.get("flag_level", "Low"),
+                        "user_visibility_default": bool(t.get("user_visibility_default", False)),
+                        "evidence_strength": evidence_strength,
+                        "_quality": quality,
+                        "ai_life_impact": "",
+                        "ai_red_flag": "",
+                        "citations": [],
+                    }
+                    lookup[(rsid, genotype)] = row
     except FileNotFoundError:
-        # No JSON model yet; fall back to CSV
-        pass
+        return {}
     except Exception as e:
-        print("Failed to load JSON trait database, falling back to CSV:", e)
-
-    # Fallback: legacy CSV loading
-    try:
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rsid = row["rsid"].strip()
-                genotype = row["genotype"].strip().upper()
-                key = (rsid, genotype)
-                lookup[key] = row
-    except Exception as e:
-        print("Failed to load CSV trait database:", e)
+        print("Failed to load data/traits.json:", e)
 
     return lookup
+
+
+def title_from_trait_id(trait_id: str) -> str:
+    return (trait_id or "").replace("_", " ").title()
+
+
+def normalize_genotype(genotype: str) -> str:
+    gt = str(genotype or "").strip().upper()
+    if gt == "--":
+        return gt
+    if len(gt) == 2 and gt.isalpha():
+        return "".join(sorted(gt))
+    return gt
+
+
+def reverse_genotype(genotype: str) -> str:
+    gt = str(genotype or "").strip().upper()
+    if len(gt) == 2:
+        return gt[::-1]
+    return gt
+
+
+def compute_db_trait_completeness(trait: dict):
+    variants = trait.get("variants", []) if isinstance(trait, dict) else []
+    variants = [v for v in variants if isinstance(v, dict)]
+    if not variants:
+        return {"score": 20, "label": "Placeholder", "missing": ["variants"]}
+
+    complete_count = 0
+    has_rsid_gene = False
+    has_two_gt = False
+    has_exp = False
+    has_ev = False
+
+    for v in variants:
+        rsid = str(v.get("rsid", "")).strip()
+        gene = str(v.get("gene", "")).strip()
+        ge = v.get("genotype_effects", {}) or v.get("genotypes", {}) or {}
+        ev = str(v.get("evidence_strength", "")).strip()
+        this_two = isinstance(ge, dict) and len(ge) >= 2
+        this_exp = False
+        if isinstance(ge, dict):
+            for gx in ge.values():
+                if isinstance(gx, dict) and str(gx.get("explanation", "")).strip():
+                    this_exp = True
+                    break
+        if rsid and gene:
+            has_rsid_gene = True
+        if this_two:
+            has_two_gt = True
+        if this_exp:
+            has_exp = True
+        if ev:
+            has_ev = True
+        if rsid and gene and this_two and this_exp and ev:
+            complete_count += 1
+
+    if complete_count == len(variants):
+        score = 100
+    else:
+        score = 20
+        score += 20 if has_rsid_gene else 0
+        score += 20 if has_two_gt else 0
+        score += 20 if has_exp else 0
+        score += 20 if has_ev else 0
+
+    if score >= 85:
+        label = "Ready"
+    elif score >= 50:
+        label = "Draft"
+    else:
+        label = "Placeholder"
+
+    missing = []
+    if not has_rsid_gene:
+        missing.append("rsid_or_gene")
+    if not has_two_gt:
+        missing.append("genotype_effects>=2")
+    if not has_exp:
+        missing.append("explanation")
+    if not has_ev:
+        missing.append("evidence_strength")
+    return {"score": score, "label": label, "missing": missing}
+
+
+def load_traits_catalog(traits_json_path=TRAITS_JSON_PATH):
+    """Load full trait catalog and precompute quality metadata."""
+    with open(traits_json_path, encoding="utf-8") as f:
+        traits = json.load(f)
+    if not isinstance(traits, list):
+        return []
+    out = []
+    for t in traits:
+        if not isinstance(t, dict):
+            continue
+        t2 = dict(t)
+        t2["_quality"] = compute_db_trait_completeness(t2)
+        out.append(t2)
+    return out
 
 
 def parse_genotype_file(path):
@@ -166,53 +366,516 @@ def parse_genotype_file(path):
                     "rsid": rsid,
                     "chromosome": chrom,
                     "position": pos,
-                    "genotype": genotype.upper(),
+                    "genotype": normalize_genotype(genotype),
                 }
             )
     return variants
 
 
-def match_traits(trait_lookup, variants):
+def _build_user_variants_map(variants):
+    if not isinstance(variants, list):
+        raise ValueError("parse_genotype_file output must be a list of dicts")
+    out = {}
+    for v in variants:
+        if not isinstance(v, dict):
+            continue
+        rsid = str(v.get("rsid", "")).strip()
+        gt = poly_normalize_genotype(v.get("genotype", ""))
+        if rsid and gt:
+            out[rsid] = gt
+    return out
+
+
+def _summarize_prs_trait(prs_obj):
+    if not isinstance(prs_obj, dict):
+        raise ValueError("PRS object must be a dict")
+    hits = prs_obj.get("variant_hits", [])
+    dominant_gene = "MULTI"
+    dominant_rsid = "MULTI"
+    dominant_genotype = ""
+    if isinstance(hits, list) and hits:
+        try:
+            top_hit = max(hits, key=lambda h: abs(float(h.get("weight", 0.0) or 0.0)))
+            dominant_gene = str(top_hit.get("gene", "")).strip() or "MULTI"
+            dominant_rsid = str(top_hit.get("rsid", "")).strip() or "MULTI"
+            dominant_genotype = str(top_hit.get("genotype", "")).strip()
+        except Exception:
+            dominant_gene = "MULTI"
+            dominant_rsid = "MULTI"
+            dominant_genotype = ""
+
+    bucket = str(prs_obj.get("bucket", "Insufficient data")).strip()
+    confidence = str(prs_obj.get("confidence", "Low")).strip()
+    coverage = float(prs_obj.get("coverage", 0.0) or 0.0)
+    effect_level = bucket if bucket in {"Low", "Typical", "High"} else "Insufficient data"
+    explanation = str(prs_obj.get("explanation", "")).strip()
+
+    priority = "Major" if (bucket == "High" and confidence != "Low" and coverage >= 0.50) else "Standard"
+    flag_level = "High" if priority == "Major" else ("Medium" if bucket == "High" else "Low")
+
+    return {
+        "trait_id": prs_obj.get("trait_id", ""),
+        "trait_name": prs_obj.get("trait_name", ""),
+        "track": prs_obj.get("category", ""),
+        "subcategory": prs_obj.get("subcategory", "General"),
+        "category": prs_obj.get("category", ""),
+        "gene": dominant_gene,
+        "rsid": dominant_rsid,
+        "user_genotype": dominant_genotype or f"{int(prs_obj.get('num_variants_found', 0))}/{int(prs_obj.get('num_variants_total', 0))} loci",
+        "effect_label": f"{bucket} polygenic tendency",
+        "effect_level": effect_level,
+        "explanation": explanation,
+        "evidence_strength": prs_obj.get("evidence_top", "Preliminary"),
+        "coverage": coverage,
+        "confidence": confidence,
+        "evidence_status": prs_obj.get("evidence_status", "missing"),
+        "evidence_snippets": prs_obj.get("evidence_snippets", []),
+        "citations": prs_obj.get("citations", []),
+        "warnings": prs_obj.get("warnings", []),
+        "trust": prs_obj.get("trust", {}),
+        "priority": priority,
+        "flag_level": flag_level,
+    }
+
+
+def _build_retrieval_query(prs_obj: dict, trait_pack: dict) -> str:
+    trait_name = str(prs_obj.get("trait_name", "")).strip()
+    category = str(prs_obj.get("category", "")).strip()
+    subcategory = str(prs_obj.get("subcategory", "")).strip()
+    genes = []
+    rsids = []
+    for v in trait_pack.get("variants", []) if isinstance(trait_pack.get("variants", []), list) else []:
+        if isinstance(v, dict):
+            g = str(v.get("gene", "")).strip()
+            if g and g not in genes:
+                genes.append(g)
+            r = str(v.get("rsid", "")).strip()
+            if r and r not in rsids:
+                rsids.append(r)
+    labels = []
+    for hit in prs_obj.get("variant_hits", []) if isinstance(prs_obj.get("variant_hits", []), list) else []:
+        if isinstance(hit, dict):
+            lab = str(hit.get("effect_label", "")).strip()
+            if lab:
+                labels.append(lab)
+    keywords = trait_pack.get("keywords", []) if isinstance(trait_pack.get("keywords", []), list) else []
+    terms = " ".join(labels[:5] + [str(k).strip() for k in keywords[:8] if str(k).strip()])
+    return f"{' '.join(genes)} {' '.join(rsids)} {trait_name} {category} {subcategory} SNP genotype effect association {terms}".strip()
+
+
+def _build_citation_objects(snippets, max_items: int = 3):
+    out = []
+    seen = set()
+    for sn in snippets if isinstance(snippets, list) else []:
+        if not isinstance(sn, dict):
+            continue
+        cid = str(sn.get("citation_id", "")).strip()
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        out.append(
+            {
+                "label": len(out) + 1,
+                "title": str(sn.get("title", "")).strip() or "Untitled",
+                "year": str(sn.get("year", "")).strip(),
+                "identifier": cid,
+                "source_url": str(sn.get("url", "")).strip(),
+            }
+        )
+        if len(out) >= max(1, int(max_items or 3)):
+            break
+    return out
+
+
+def filter_prs_results_for_display(prs_results, red_flag_only=True):
+    if not isinstance(prs_results, list):
+        raise ValueError("prs_results must be a list")
+    if not red_flag_only:
+        return prs_results, ""
+
+    filtered = []
+    for r in prs_results:
+        if not isinstance(r, dict):
+            continue
+        bucket = str(r.get("bucket", "")).strip()
+        confidence = str(r.get("confidence", "")).strip()
+        coverage = float(r.get("coverage", 0.0) or 0.0)
+        completeness_status = str((r.get("completeness") or {}).get("status", "")).strip()
+        warnings = r.get("warnings", [])
+        warnings = warnings if isinstance(warnings, list) else []
+
+        has_insufficient_warning = any("Insufficient data" in str(w) for w in warnings)
+        if has_insufficient_warning:
+            continue
+
+        strong_high = bucket == "High" and confidence != "Low" and coverage >= 0.50
+        complete_high = completeness_status == "Complete" and bucket == "High"
+        if strong_high or complete_high:
+            filtered.append(r)
+
+    if filtered:
+        return filtered, ""
+
+    fallback = sorted(
+        [r for r in prs_results if isinstance(r, dict)],
+        key=lambda x: float(x.get("coverage", 0.0) or 0.0),
+        reverse=True,
+    )[:5]
+    return fallback, "No high flags detected; showing best-covered traits"
+
+
+def build_prs_report_from_upload(genotype_path: str, categories_selected: list[str], include_optional_liver: bool, red_flag_only: bool) -> dict:
+    variants = parse_genotype_file(genotype_path)
+    user_map = _build_user_variants_map(variants)
+
+    categories = [c for c in (categories_selected or []) if isinstance(c, str) and c.strip()]
+    if include_optional_liver and "Liver" not in categories:
+        categories = categories + ["Liver"]
+
+    packs = load_all_trait_packs(
+        base_dir="trait_study_packs",
+        categories=categories if categories else None,
+        include_optional=include_optional_liver,
+    )
+
+    pack_index = index_packs_by_id(packs)
+    prs_results = []
+    for pack in packs:
+        if not isinstance(pack, dict):
+            continue
+        prs_results.append(compute_prs_for_trait(pack, user_map))
+
+    display_results = [r for r in prs_results if isinstance(r, dict)]
+    fallback_note = ""
+    corpus = load_corpus("evidence_corpus")
+    traits_refused = 0
+    traits_with_evidence = 0
+    traits_missing_evidence = 0
+
+    for r in display_results:
+        if not isinstance(r, dict):
+            continue
+        trait_id = str(r.get("trait_id", "")).strip()
+        trait_pack = pack_index.get(trait_id, {})
+        completeness_status = str((r.get("completeness") or {}).get("status", "")).strip()
+        r["evidence_status"] = "missing"
+        r["evidence_snippets"] = []
+        r["citations"] = []
+        r["explanation"] = ""
+
+        if not trait_pack:
+            r.setdefault("warnings", []).append("Insufficient evidence in local corpus")
+            r["trust"] = {
+                "bucket": r.get("bucket", "Insufficient data"),
+                "confidence": r.get("confidence", "Low"),
+                "coverage": r.get("coverage", 0.0),
+                "evidence_quality": "Low",
+                "citations_count": 0,
+                "bias_note": "Genetic associations are population-level and may not generalize equally across ancestry groups; this is educational only.",
+            }
+            traits_refused += 1
+            traits_missing_evidence += 1
+            continue
+
+        if (not trait_pack.get("variants")) or completeness_status == "ComingSoon":
+            r.setdefault("warnings", []).append("Coming soon: variant mapping and evidence curation in progress.")
+            r["trust"] = {
+                "bucket": r.get("bucket", "Insufficient data"),
+                "confidence": r.get("confidence", "Low"),
+                "coverage": r.get("coverage", 0.0),
+                "evidence_quality": "Low",
+                "citations_count": 0,
+                "bias_note": "Genetic associations are population-level and may not generalize equally across ancestry groups; this is educational only.",
+            }
+            traits_refused += 1
+            traits_missing_evidence += 1
+            continue
+
+        query = _build_retrieval_query(r, trait_pack)
+        snippets = retrieve_local_evidence(query=query, trait_pack=trait_pack, k=12)
+        quality = evidence_quality(snippets)
+        if quality.get("quality") in {"High", "Medium"} and snippets:
+            traits_with_evidence += 1
+            r["evidence_status"] = "found"
+            r["evidence_snippets"] = [s for s in snippets if isinstance(s, dict)][:12]
+            citations = _build_citation_objects(snippets, max_items=3)
+            gen = generate_trait_explanation_rag(r, snippets, quality)
+
+            if gen.get("unsupported", False):
+                r["explanation"] = ""
+                r["citations"] = []
+                r["evidence_status"] = "missing"
+                r.setdefault("warnings", []).append(str(gen.get("refusal_reason", "Insufficient evidence in local corpus")))
+                traits_refused += 1
+                traits_missing_evidence += 1
+            else:
+                ex1 = str(gen.get("explanation_1", "")).strip()
+                ex2 = str(gen.get("explanation_2", "")).strip()
+                r["explanation"] = (ex1 + (" " + ex2 if ex2 else "")).strip()
+                r["citations"] = citations
+        else:
+            r["evidence_status"] = "missing"
+            r["evidence_snippets"] = []
+            r["citations"] = []
+            r["explanation"] = ""
+            traits_missing_evidence += 1
+
+        r["trust"] = {
+            "bucket": r.get("bucket", "Insufficient data"),
+            "confidence": r.get("confidence", "Low"),
+            "coverage": r.get("coverage", 0.0),
+            "evidence_quality": quality.get("quality", "Low"),
+            "citations_count": len(r.get("citations", [])),
+            "bias_note": "Genetic associations are population-level and may not generalize equally across ancestry groups; this is educational only.",
+        }
+
+    display_traits = [_summarize_prs_trait(r) for r in display_results]
+
+    report = {
+        "summary": {
+            "num_traits_found": len(display_traits),
+            "categories": sorted({t.get("category", "") for t in display_traits if t.get("category")}),
+            "engine": "polygenic_v1",
+            "red_flag_only": bool(red_flag_only),
+            "evidence_found_count": traits_with_evidence,
+            "evidence_missing_count": traits_missing_evidence,
+        },
+        "traits": display_traits,
+        "traits_major": [t for t in display_traits if str(t.get("priority", "")).lower() == "major"],
+        "traits_standard": [t for t in display_traits if str(t.get("priority", "")).lower() != "major"],
+        "prs_debug": {str(r.get("trait_id", "")): r for r in prs_results if isinstance(r, dict) and r.get("trait_id")},
+        "trust_summary": {
+            "retrieval_corpus_size": len(corpus),
+            "traits_with_evidence": traits_with_evidence,
+            "traits_refused": traits_refused,
+            "traits_missing_evidence": traits_missing_evidence,
+        },
+        "warnings": [fallback_note] if fallback_note else [],
+    }
+
+    avg_cov = 0.0
+    if display_results:
+        avg_cov = sum(float(r.get("coverage", 0.0) or 0.0) for r in display_results) / len(display_results)
+    print(
+        f"Engine: polygenic_v1 | Traits displayed: {len(display_traits)} | "
+        f"Red-flag-only: {bool(red_flag_only)} | Avg coverage: {avg_cov:.2f}"
+    )
+    return normalize_report(report)
+
+
+def match_traits(a, b):
     """
-    For each variant in the user file, check if we have a trait row for (rsid, genotype).
-    Returns a list of matched trait objects ready for AI.
+    Match uploaded variants to traits.
+
+    Supports TWO calling styles:
+      1) match_traits(trait_lookup_dict, variants_list)   # old CSV lookup style
+      2) match_traits(variants_list, traits_list)         # new YAML traits list style
+
+    Returns: matched_traits (list of dicts)
     """
+    # --- Detect argument order ---
+    variants = None
+    trait_lookup = None
+    traits_list = None
+
+    # If first arg is a list, determine whether it is variants or trait defs.
+    if isinstance(a, list):
+        a0 = a[0] if a else {}
+        b0 = b[0] if isinstance(b, list) and b else {}
+        a_is_dict = isinstance(a0, dict)
+        b_is_dict = isinstance(b0, dict)
+
+        a_looks_like_variants = a_is_dict and ("rsid" in a0 and "genotype" in a0)
+        a_looks_like_traits = a_is_dict and ("snps" in a0 or "trait_name" in a0 or "title" in a0 or "variants" in a0)
+        b_looks_like_variants = b_is_dict and ("rsid" in b0 and "genotype" in b0)
+
+        if a_looks_like_variants:
+            variants = a
+            if isinstance(b, dict):
+                trait_lookup = b
+            elif isinstance(b, list):
+                traits_list = b
+            else:
+                raise TypeError("Second argument must be a dict (lookup) or list (traits).")
+        elif a_looks_like_traits and isinstance(b, list) and b_looks_like_variants:
+            # Support call style: match_traits(traits_list, variants)
+            traits_list = a
+            variants = b
+        else:
+            # Preserve old style fallback while avoiding .get() on a list later.
+            trait_lookup = a if isinstance(a, dict) else None
+            variants = b
+    else:
+        # old style: a is lookup dict, b is variants
+        trait_lookup = a
+        variants = b
+
+    # --- Build rsid -> genotype map from uploaded variants ---
+    LAST_MATCH_WARNINGS.clear()
+    rs_to_gt = {}
+    for row in variants if isinstance(variants, list) else []:
+        if not isinstance(row, dict):
+            continue
+        rsid = str(row.get("rsid", "")).strip()
+        raw_gt = str(row.get("genotype", "")).strip().upper()
+        gt = normalize_genotype(raw_gt)
+        if not rsid:
+            continue
+        if not raw_gt or raw_gt == "--" or gt == "--":
+            LAST_MATCH_WARNINGS.append(f"Skipped {rsid} due to missing genotype.")
+            continue
+        if len(gt) != 2 or not gt.isalpha():
+            LAST_MATCH_WARNINGS.append(
+                f"Skipped {rsid} due to unsupported genotype format '{raw_gt}'."
+            )
+            continue
+        rs_to_gt[rsid] = {"raw": raw_gt, "canonical": gt}
+
+    uploaded_rsids = set(rs_to_gt.keys())
+
     matched_traits = []
 
-    for var in variants:
-        key = (var["rsid"], var["genotype"])
-        if key in trait_lookup:
-            row = trait_lookup[key]
+    # =========================================================
+    # NEW YAML STYLE: traits_list contains 'snps' list per trait
+    # =========================================================
+    if traits_list is not None:
+        for t in traits_list:
+            if not isinstance(t, dict):
+                continue
+            if not trait_has_variants(t):
+                continue
+            q = t.get("_quality", {})
+            if not isinstance(q, dict) or q.get("label") != "Ready":
+                continue
+            snps = t.get("snps", []) or []
+            # Only show traits that are present in the upload (your requirement)
+            present = [rs for rs in snps if rs in uploaded_rsids]
+            if not present:
+                continue
+
+            # Choose one representative SNP to display
+            rsid = present[0]
             trait_obj = {
-                "trait_id": row["trait_id"],
-                "trait_name": row["trait_name"],
-                "category": row["category"],
-                "rsid": row["rsid"],
-                "gene": row["gene"],
-                "user_genotype": var["genotype"],
-                "effect_label": row["effect_label"],
-                "effect_level": row["effect_level"],
-                "explanation": row["explanation"],
-                "evidence_strength": row["evidence_strength"],
+                "trait_id": t.get("trait_id", t.get("id", "")),
+                "trait_name": t.get("trait_name", t.get("title", "")),
+                "track": t.get("track", t.get("category", "")),
+                "subcategory": t.get("subcategory", "General"),
+                "category": t.get("category", ""),
+                "rsid": rsid,
+                "gene": "",  # not available in YAML yet
+                "user_genotype": (rs_to_gt.get(rsid, {}) or {}).get("canonical", ""),
+                "effect_label": "",  # not available in YAML yet
+                "effect_level": "",  # not available in YAML yet
+                "explanation": t.get("explanation", ""),
+                "why_it_matters": t.get("why_it_matters", ""),
+                "recommendations": t.get("recommendations", []),
+                "what_it_does_not_mean": t.get("what_it_does_not_mean", ""),
+                "evidence_strength": t.get("evidence_strength", "Limited"),
+                "priority": t.get("priority", "Standard"),
+                "flag_level": t.get("flag_level", "Low"),
+                "user_visibility_default": bool(t.get("user_visibility_default", False)),
+                "_quality": q,
+                "ai_life_impact": "",
+                "ai_red_flag": "",
+                "citations": [],
             }
             matched_traits.append(trait_obj)
 
+        return matched_traits
+
+    # =========================================================
+    # OLD CSV STYLE: trait_lookup keyed by (rsid, genotype)
+    # =========================================================
+    if trait_lookup is None:
+        raise ValueError("No trait lookup provided.")
+
+    for rsid, gt_info in rs_to_gt.items():
+        raw_gt = (gt_info or {}).get("raw", "")
+        canonical_gt = (gt_info or {}).get("canonical", "")
+        candidates = []
+        for cand in (raw_gt, reverse_genotype(raw_gt), canonical_gt):
+            c = str(cand or "").strip().upper()
+            if c and c not in candidates:
+                candidates.append(c)
+
+        row = None
+        matched_gt = canonical_gt
+        for cand in candidates:
+            key = (rsid, normalize_genotype(cand))
+            row = trait_lookup.get(key)
+            if row:
+                matched_gt = normalize_genotype(cand)
+                break
+        if not row:
+            continue
+
+        trait_obj = {
+            "trait_id": row.get("trait_id", ""),
+            "trait_name": row.get("trait_name", ""),
+            "track": row.get("track", row.get("category", "")),
+            "subcategory": row.get("subcategory", "General"),
+            "category": row.get("track", row.get("category", "")),
+            "rsid": row.get("rsid", rsid),
+            "gene": row.get("gene", ""),
+            "user_genotype": matched_gt,
+            "effect_label": row.get("effect_label", ""),
+            "effect_level": row.get("effect_level", ""),
+            "explanation": row.get("explanation", ""),
+            "evidence_strength": row.get("evidence_strength", "Limited"),
+            "paper_seeds": row.get("paper_seeds", []),
+            "keywords": row.get("keywords", []),
+            "priority": row.get("priority", "Standard"),
+            "flag_level": row.get("flag_level", "Low"),
+            "user_visibility_default": bool(row.get("user_visibility_default", False)),
+            "_quality": row.get("_quality", {}),
+            "ai_life_impact": "",
+            "ai_red_flag": "",
+            "citations": [],
+        }
+        matched_traits.append(trait_obj)
+
     return matched_traits
 
-
 def build_report_object(matched_traits):
+    if not isinstance(matched_traits, list):
+        matched_traits = []
+    matched_traits = [t for t in matched_traits if isinstance(t, dict)]
     """
     Build a JSON-like object summarizing everything.
     This is what you'd send into an AI model prompt.
     """
+    warnings = []
+    if len(matched_traits) == 0:
+        warnings.append("No traits matched your uploaded file.")
+    if LAST_DB_WARNINGS:
+        warnings.append("Some trait rules were skipped due to unsupported genotype encoding in the database.")
+    if LAST_MATCH_WARNINGS:
+        warnings.append("Some variants were skipped due to missing or unsupported genotype format.")
+    if len(matched_traits) > 0 and all(int((t.get("_quality") or {}).get("score", 0)) < 100 for t in matched_traits):
+        warnings.append("Only traits with incomplete data matched.")
+    if len(matched_traits) > 0 and any(not str(t.get("explanation", "")).strip() for t in matched_traits):
+        warnings.append("Coming soon: some matched traits do not yet have full explanations.")
+
     report = {
         "summary": {
             "num_traits_found": len(matched_traits),
-            "categories": sorted({t["category"] for t in matched_traits}),
+            "categories": sorted({t.get("track", t.get("category", "")) for t in matched_traits if t.get("track", t.get("category", ""))}),
+            "total_matched_ready": len(matched_traits),
+            "major_matched_count": sum(1 for t in matched_traits if str(t.get("priority", "")).strip().lower() == "major"),
+            "standard_matched_count": sum(1 for t in matched_traits if str(t.get("priority", "")).strip().lower() != "major"),
+            "traits_ready_count": sum(1 for t in matched_traits if isinstance(t.get("_quality"), dict) and t.get("_quality", {}).get("label") == "Ready"),
+            "traits_draft_count": sum(1 for t in matched_traits if isinstance(t.get("_quality"), dict) and t.get("_quality", {}).get("label") == "Draft"),
+            "traits_placeholder_count": sum(1 for t in matched_traits if isinstance(t.get("_quality"), dict) and t.get("_quality", {}).get("label") == "Placeholder"),
         },
         "traits": matched_traits,
+        "traits_major": [t for t in matched_traits if str(t.get("priority", "")).strip().lower() == "major"],
+        "traits_standard": [t for t in matched_traits if str(t.get("priority", "")).strip().lower() != "major"],
+        "polygenic": {},
+        "evidence": {},
+        "trust": {"coverage": 0.0, "confidence": "Low", "citations": []},
+        "warnings": warnings,
     }
-    return report
+    return normalize_report(report)
 
 def effect_level_to_percent(effect_level: str) -> int:
     """
@@ -245,6 +908,7 @@ def effect_level_to_percent(effect_level: str) -> int:
     return 50
 
 def generate_html_report(report, ai_summary=None):
+    report = normalize_report(report)
     # Simple icon per category
     category_icons = {
         "Nutrition": "🥦",
@@ -415,14 +1079,6 @@ def generate_html_report(report, ai_summary=None):
             font-size: 0.95em;
         }
     </style>
-    <script>
-      function scrollToSection(id) {
-        var el = document.getElementById(id);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }
-    </script>
 </head>
 <body>
 <div class="page">
@@ -444,7 +1100,7 @@ def generate_html_report(report, ai_summary=None):
             icon = category_icons.get(cat, "🧬")
             safe_id = f"cat-{cat.replace(' ', '-')}"
             html_parts.append(
-                f"<a onclick=\"scrollToSection('{safe_id}')\">{icon} {cat}</a>"
+                f"<a href='#{safe_id}'>{icon} {cat}</a>"
             )
         html_parts.append("</div></div>")
 
@@ -489,6 +1145,36 @@ def generate_html_report(report, ai_summary=None):
             html_parts.append(
                 f'<div class="meta">Gene: {t["gene"]} ({t["rsid"]}) · Genotype: {t["user_genotype"]}</div>'
             )
+            if "coverage" in t or "confidence" in t:
+                cov = t.get("coverage", None)
+                cov_txt = f"{float(cov) * 100:.0f}%" if isinstance(cov, (int, float)) else "n/a"
+                conf_txt = t.get("confidence", "n/a")
+                cits = t.get("citations", []) if isinstance(t.get("citations", []), list) else []
+                html_parts.append(
+                    f'<div class="meta">Coverage: {cov_txt} · Confidence: {conf_txt} · Citations: {len(cits)}</div>'
+                )
+            trust = t.get("trust", {}) if isinstance(t.get("trust"), dict) else {}
+            if trust:
+                t_bucket = trust.get("bucket", t.get("effect_level", "n/a"))
+                t_conf = trust.get("confidence", t.get("confidence", "n/a"))
+                t_cov = trust.get("coverage", t.get("coverage", None))
+                t_cov_txt = f"{float(t_cov) * 100:.0f}%" if isinstance(t_cov, (int, float)) else "n/a"
+                t_eq = trust.get("evidence_quality", "Low")
+                t_cits = t.get("citations", []) if isinstance(t.get("citations", []), list) else []
+                t_bias = trust.get("bias_note", "")
+                html_parts.append('<div class="meta"><strong>Trust Panel</strong></div>')
+                html_parts.append(f'<div class="meta">Polygenic bucket: {t_bucket}</div>')
+                html_parts.append(f'<div class="meta">Confidence: {t_conf}</div>')
+                html_parts.append(f'<div class="meta">Coverage: {t_cov_txt}</div>')
+                html_parts.append(f'<div class="meta">Evidence quality: {t_eq}</div>')
+                html_parts.append(
+                    f'<div class="meta">Citations: {", ".join(t_cits) if t_cits else "None yet"}</div>'
+                )
+                if t_bias:
+                    html_parts.append(f'<div class="meta">Bias note: {t_bias}</div>')
+            warns = t.get("warnings", []) if isinstance(t.get("warnings", []), list) else []
+            if warns:
+                html_parts.append(f'<div class="meta">Warnings: {"; ".join(str(w) for w in warns[:2])}</div>')
             html_parts.append(
                 '<div class="effect">'
                 f'<span class="effect-label">Effect:</span> {t["effect_label"]} '
