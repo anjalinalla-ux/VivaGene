@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import csv
 import json
 import re
@@ -25,6 +26,8 @@ from utils.trait_quality import compute_trait_completeness, trait_has_variants
 from rag_retrieval import load_study_packs, retrieve_evidence
 from polygenic import compute_prs
 from evidence_guard import enforce_evidence_only
+from rag_evidence import ensure_trait_evidence
+from explain import build_explanation
 try:
     from openai import OpenAI
 except Exception:
@@ -288,6 +291,72 @@ def build_category_panel_html(category: str, traits: list[dict]) -> str:
     ).strip()
 
 
+def build_tab_panel_html(traits: list[dict], mode_label: str) -> str:
+    cards = []
+    for trait in traits:
+        if not isinstance(trait, dict):
+            continue
+        name = _html_escape(trait.get("trait_name", trait.get("trait_id", "Trait")))
+        gene = _html_escape(trait.get("gene", ""))
+        rsid = _html_escape(trait.get("rsid", ""))
+        gt = _html_escape(trait.get("user_genotype", "not found"))
+        coverage = trait.get("coverage", 0.0)
+        cov_txt = f"{float(coverage) * 100:.0f}%" if isinstance(coverage, (int, float)) else "0%"
+        evidence_level = _html_escape(trait.get("evidence_strength", "Unknown"))
+        signal = _html_escape(str(trait.get("effect_level", "")).strip() or str(trait.get("effect_label", "")).strip())
+        summary = _html_escape(trait.get("_final_summary", ""))
+        life = _html_escape(trait.get("_final_life_impact", ""))
+        explanation_html = f"{summary} {life}".strip() or "Evidence pending — no explanatory claims shown yet (RAG safety)."
+        has_variant = bool(trait.get("has_any_variant", False))
+        variant_note = "" if has_variant else "<div class='trait-missing'>No variants found in uploaded file.</div>"
+        queries = trait.get("_queries_used", []) if isinstance(trait.get("_queries_used", []), list) else []
+        queries_html = ""
+        if not summary:
+            qtxt = ", ".join(_html_escape(q) for q in queries[:3]) if queries else "No query metadata available."
+            queries_html = f"<div class='trait-query'>Queries used: {qtxt}</div>"
+        citations = trait.get("_final_citations", []) if isinstance(trait.get("_final_citations", []), list) else []
+        if citations:
+            cite_items = []
+            for c in citations[:3]:
+                label, url = citation_to_link(c)
+                lbl = _html_escape(label)
+                if url:
+                    cite_items.append(f"<li><a href='{_html_escape(url)}' target='_blank'>{lbl}</a></li>")
+                else:
+                    cite_items.append(f"<li>{lbl}</li>")
+            cites_html = "<ul class='trait-citations'>" + "".join(cite_items) + "</ul>"
+        else:
+            cites_html = "<div class='trait-citations-empty'>Citations pending.</div>"
+        cards.append(
+            textwrap.dedent(
+                f"""
+                <div class='trait-mini-card'>
+                  <div class='trait-mini-title'>{name}</div>
+                  <div class='trait-mini-meta'>Gene {gene} · rsID {rsid} · Genotype {gt}</div>
+                  <div class='trait-mini-meta'>Coverage {cov_txt} · Evidence level {evidence_level}</div>
+                  <div class='trait-mini-meta'>Signal {signal}</div>
+                  {variant_note}
+                  <div class='trait-mini-expl'>{explanation_html}</div>
+                  {queries_html}
+                  <div class='trait-mini-cite-label'>Sources</div>
+                  {cites_html}
+                </div>
+                """
+            ).strip()
+        )
+    cards_html = "\n".join(cards) if cards else "<div class='trait-citations-empty'>No traits in this category.</div>"
+    return textwrap.dedent(
+        f"""
+        <div class='single-results-panel'>
+          <div class='single-results-head'>Mode: {_html_escape(mode_label)}</div>
+          <div class='single-results-body'>
+            {cards_html}
+          </div>
+        </div>
+        """
+    ).strip()
+
+
 def build_filtered_report(report_obj, selected_traits):
     report = normalize_report(dict(report_obj) if isinstance(report_obj, dict) else {})
     selected = [t for t in (selected_traits or []) if isinstance(t, dict)]
@@ -310,7 +379,7 @@ def build_filtered_report(report_obj, selected_traits):
     return report
 
 
-def generate_pdf_report_bytes(report_obj: dict) -> bytes:
+def generate_pdf_report_bytes(report_obj: dict, mode_used: str = "") -> bytes:
     report = normalize_report(report_obj if isinstance(report_obj, dict) else {})
     traits = [t for t in report.get("traits", []) if isinstance(t, dict)]
     summary = report.get("summary", {}) if isinstance(report.get("summary", {}), dict) else {}
@@ -329,6 +398,9 @@ def generate_pdf_report_bytes(report_obj: dict) -> bytes:
         )
     )
     story.append(Spacer(1, 8))
+    if mode_used:
+        story.append(Paragraph(f"Explanation mode: {mode_used}", styles["BodyText"]))
+        story.append(Spacer(1, 6))
 
     cats = summary.get("categories", []) if isinstance(summary.get("categories", []), list) else []
     coverage_vals = [float(t.get("coverage", 0.0) or 0.0) for t in traits if isinstance(t.get("coverage"), (int, float))]
@@ -390,17 +462,23 @@ def generate_pdf_report_bytes(report_obj: dict) -> bytes:
         )
         status = str(t.get("evidence_status", "missing")).strip().lower()
         explanation = str(t.get("explanation", "")).strip()
-        citations = t.get("citations", []) if isinstance(t.get("citations", []), list) else []
+        citations = t.get("_final_citations", t.get("citations", []))
+        if not isinstance(citations, list):
+            citations = []
         if status == "found" and explanation:
             story.append(Paragraph(explanation, styles["BodyText"]))
             if citations:
                 story.append(Paragraph("Citations:", styles["BodyText"]))
                 for c in citations[:3]:
                     if isinstance(c, dict):
-                        ident = str(c.get("identifier", "")).strip()
+                        ident = str(c.get("identifier", "")).strip() or str(c.get("pmid", "")).strip() or str(c.get("pmcid", "")).strip() or str(c.get("doi", "")).strip()
                         title = str(c.get("title", "")).strip() or "Source"
                         year = str(c.get("year", "")).strip()
-                        story.append(Paragraph(f"- {ident} | {title} {f'({year})' if year else ''}", styles["BodyText"]))
+                        url = str(c.get("source_url", c.get("url", ""))).strip()
+                        row = f"- {ident} | {title} {f'({year})' if year else ''}"
+                        if url:
+                            row += f" | {url}"
+                        story.append(Paragraph(row, styles["BodyText"]))
         else:
             prov = t.get("search_provenance", {}) if isinstance(t.get("search_provenance", {}), dict) else {}
             query_txt = str(prov.get("query", "")).strip()
@@ -1412,6 +1490,37 @@ st.markdown(
         font-size: 12px;
         color: #6b7280;
     }
+    .single-results-panel {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        overflow: hidden;
+    }
+    .single-results-head {
+        padding: 10px 14px;
+        border-bottom: 1px solid #e5e7eb;
+        color: #374151;
+        background: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .single-results-body {
+        height: 520px;
+        overflow-y: auto;
+        padding: 10px;
+        background: #ffffff;
+    }
+    .trait-missing {
+        font-size: 12px;
+        color: #9a3412;
+        margin: 4px 0 6px;
+    }
+    .trait-query {
+        font-size: 12px;
+        color: #6b7280;
+        margin: 6px 0;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -2019,8 +2128,12 @@ elif page == "Upload & Report":
             options=["Neurobehavior", "Nutrition", "Fitness", "Liver"],
             default=["Neurobehavior", "Nutrition", "Fitness"],
         )
-        include_optional_liver = st.checkbox("Include optional liver traits", value=False)
-        red_flag_only = st.checkbox("Show red-flag traits only", value=True)
+        explain_mode = st.radio("Explanation style", ["Patient (simple)", "Doctor (technical)"], horizontal=True)
+        st.session_state["explain_mode"] = explain_mode
+        include_optional_liver = st.checkbox("Include Liver category (optional)", value=False)
+        st.session_state["include_liver"] = include_optional_liver
+        show_only_found = st.checkbox("Show only traits found in file", value=True)
+        st.session_state["show_only_found"] = show_only_found
         max_refresh_traits = st.number_input(
             "Evidence refresh batch size",
             min_value=1,
@@ -2077,7 +2190,7 @@ elif page == "Upload & Report":
                         genotype_path=genotype_path,
                         categories_selected=categories_selected,
                         include_optional_liver=include_optional_liver,
-                        red_flag_only=red_flag_only,
+                        red_flag_only=False,
                     )
                     report = normalize_report(report)
                     if not isinstance(report, dict):
@@ -2129,7 +2242,11 @@ elif page == "Upload & Report":
 
                         st.markdown("### Trait cards")
                         grouped = {"Neurobehavior": [], "Nutrition": [], "Fitness": [], "Liver": []}
-                        trait_ids_for_fetch = []
+                        mode_now = st.session_state.get("explain_mode", "Patient (simple)")
+                        show_only_found_now = bool(st.session_state.get("show_only_found", True))
+                        if not enriched_traits:
+                            st.error("No traits were loaded from analysis output. Please verify file format and rerun.")
+
                         for trait in enriched_traits:
                             if not isinstance(trait, dict):
                                 continue
@@ -2143,78 +2260,91 @@ elif page == "Upload & Report":
                             )
                             norm_cat = normalize_category(raw_cat)
                             if not norm_cat:
-                                norm_cat = "Neurobehavior"  # keep all matched traits visible
-                            if norm_cat == "Liver" and not include_optional_liver:
                                 norm_cat = "Neurobehavior"
+                            if norm_cat == "Liver" and not include_optional_liver:
+                                continue
 
-                            explanation_raw = two_sentence_text(trait.get("explanation", ""))
-                            citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
-                            if not explanation_raw:
-                                explanation_raw = fallback_explanation_for_trait(trait, norm_cat)
-                            trait["_display_explanation"] = explanation_raw
-                            if not citations:
-                                trait.setdefault("citations", [])
+                            coverage = float(trait.get("coverage", 0.0) or 0.0) if isinstance(trait.get("coverage", 0.0), (int, float)) else 0.0
+                            has_any_variant = coverage > 0.0
+                            trait["has_any_variant"] = has_any_variant
+                            trait.setdefault("present_variants", [])
+                            trait.setdefault("missing_variants", [])
+                            if show_only_found_now and not has_any_variant:
+                                continue
+
+                            evidence = ensure_trait_evidence(
+                                {
+                                    "trait_id": trait.get("trait_id", ""),
+                                    "trait_name": trait.get("trait_name", ""),
+                                    "category": norm_cat,
+                                    "gene": trait.get("gene", ""),
+                                    "rsid": trait.get("rsid", ""),
+                                },
+                                min_citations=2,
+                                min_snippets=2,
+                                max_results=8,
+                            )
+                            exp = build_explanation(trait, evidence, mode_now)
+                            summary_txt = two_sentence_text(exp.get("summary", ""))
+                            life_txt = two_sentence_text(exp.get("life_impact", ""))
+                            if not has_any_variant:
+                                summary_txt = "No variants found in the uploaded file for this trait. General evidence is shown below, but no user-specific claim is made."
+                                life_txt = ""
+                            if "Evidence pending" in summary_txt:
+                                life_txt = ""
+                            if "Doctor" in mode_now and summary_txt and "Evidence pending" not in summary_txt:
+                                if "[PMID:" not in summary_txt and "[PMCID:" not in summary_txt and "[DOI:" not in summary_txt:
+                                    summary_txt = "Evidence pending — no explanatory claims shown yet (RAG safety)."
+                                    life_txt = ""
+                            trait["_final_summary"] = summary_txt
+                            trait["_final_life_impact"] = life_txt
+                            trait["_queries_used"] = exp.get("queries_used", [])
+                            trait["_final_citations"] = exp.get("citations", []) if isinstance(exp.get("citations", []), list) else []
+                            trait["citations"] = trait["_final_citations"]
                             trait["_normalized_category"] = norm_cat
                             grouped.setdefault(norm_cat, []).append(trait)
 
-                            tid = str(trait.get("trait_id", "")).strip()
-                            if tid:
-                                trait_ids_for_fetch.append(tid)
+                        tab_labels = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver (optional)"] if include_optional_liver else [])
+                        tabs = st.tabs(tab_labels)
+                        tab_to_cat = [("Neurobehavior", tabs[0]), ("Nutrition", tabs[1]), ("Fitness", tabs[2])]
+                        if include_optional_liver:
+                            tab_to_cat.append(("Liver", tabs[3]))
 
-                        categories_in_order = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver"] if include_optional_liver else [])
-                        panel_cols = st.columns(len(categories_in_order)) if categories_in_order else []
-                        for idx, cat_name in enumerate(categories_in_order):
-                            traits_cat = grouped.get(cat_name, [])
-                            with panel_cols[idx]:
-                                st.markdown(build_category_panel_html(cat_name, traits_cat), unsafe_allow_html=True)
-                        st.markdown("<div style='color:#10b981;font-weight:600;'>Rendered HTML OK</div>", unsafe_allow_html=True)
-
-                        st.markdown("#### Fetch evidence for a single trait")
-                        if trait_ids_for_fetch:
-                            unique_ids = sorted(set(trait_ids_for_fetch))
-                            selected_tid = st.selectbox(
-                                "Trait",
-                                options=unique_ids,
-                                key="trait_fetch_select",
-                            )
-                            if st.button(
-                                "Processing..." if st.session_state.evidence_processing else "Fetch evidence for selected trait",
-                                key="fetch_selected_trait",
-                                disabled=bool(st.session_state.evidence_processing or st.session_state.report_processing),
-                            ):
-                                st.session_state.evidence_processing = True
-                                progress_t = st.progress(10, text=f"Refreshing evidence for {selected_tid}...")
-                                with st.spinner(f"Refreshing evidence for {selected_tid}..."):
-                                    progress_t.progress(55, text="Querying Europe PMC...")
-                                    rc_t, out_t, err_t = run_evidence_builder(max_traits=1, trait_id=selected_tid)
-                                progress_t.progress(100, text="Trait evidence refresh complete.")
-                                if rc_t == 0:
-                                    st.success(f"Evidence refresh complete for {selected_tid}.")
-                                else:
-                                    st.warning(f"Evidence refresh finished with warnings for {selected_tid}.")
-                                with st.expander(f"Fetch log: {selected_tid}"):
-                                    if out_t:
-                                        st.code(out_t, language="json")
-                                    if err_t:
-                                        st.code(err_t, language="text")
-                                st.session_state.evidence_processing = False
-                                st.rerun()
+                        with st.container():
+                            st.markdown("#### Trait highlights (educational)")
+                            for cat_name, tab in tab_to_cat:
+                                with tab:
+                                    panel_html = build_tab_panel_html(grouped.get(cat_name, []), mode_now)
+                                    if "<div class=" in panel_html:
+                                        components.html(panel_html, height=560, scrolling=True)
+                                    else:
+                                        st.markdown(panel_html, unsafe_allow_html=True)
 
                         # Runtime integrity checks
                         rendered_count = sum(len(v) for v in grouped.values())
-                        if rendered_count != len(enriched_traits):
+                        expected_count = len(
+                            [
+                                t for t in enriched_traits
+                                if isinstance(t, dict)
+                                and (include_optional_liver or normalize_category(" ".join([str(t.get("category","")), str(t.get("track","")), str(t.get("subcategory","")), str(t.get("trait_name",""))])) != "Liver")
+                                and ((not show_only_found_now) or (isinstance(t.get("coverage", 0.0), (int, float)) and float(t.get("coverage", 0.0) or 0.0) > 0.0))
+                            ]
+                        )
+                        if rendered_count != expected_count:
                             st.warning(
-                                f"Integrity check: rendered trait cards ({rendered_count}) do not match matched traits ({len(enriched_traits)})."
+                                f"Integrity check: rendered trait cards ({rendered_count}) do not match expected displayed traits ({expected_count})."
                             )
-                        bad_claim_traits = [
+                        bad_doctor_traits = [
                             t.get("trait_id", t.get("trait_name", "Trait"))
-                            for t in enriched_traits
-                            if str(t.get("evidence_status", "")).strip().lower() == "missing" and str(t.get("explanation", "")).strip()
+                            for rows in grouped.values() for t in rows
+                            if "Doctor" in mode_now
+                            and "Evidence pending" not in str(t.get("_final_summary", ""))
+                            and "[PMID:" not in str(t.get("_final_summary", ""))
+                            and "[PMCID:" not in str(t.get("_final_summary", ""))
+                            and "[DOI:" not in str(t.get("_final_summary", ""))
                         ]
-                        if bad_claim_traits:
-                            st.warning(
-                                "Integrity check: missing-evidence traits contained explanation text; hidden in UI to avoid unsupported claims."
-                            )
+                        if bad_doctor_traits:
+                            st.warning("Citation check: some doctor-mode summaries lacked explicit citations and were replaced with evidence-pending text.")
 
                         text_report = generate_text_report(filtered_report)
 
@@ -2230,7 +2360,7 @@ elif page == "Upload & Report":
                         with st.expander("View report HTML source"):
                             st.code(html_report, language="html")
 
-                        pdf_bytes = generate_pdf_report_bytes(filtered_report)
+                        pdf_bytes = generate_pdf_report_bytes(filtered_report, mode_used=mode_now)
                         st.download_button(
                             label="Download PDF report",
                             data=pdf_bytes,

@@ -397,6 +397,15 @@ def _summarize_prs_trait(prs_obj):
     if not isinstance(prs_obj, dict):
         raise ValueError("PRS object must be a dict")
     hits = prs_obj.get("variant_hits", [])
+    all_rsids = prs_obj.get("all_variant_rsids", []) if isinstance(prs_obj.get("all_variant_rsids", []), list) else []
+    present_rsids = []
+    for h in hits if isinstance(hits, list) else []:
+        if not isinstance(h, dict):
+            continue
+        r = str(h.get("rsid", "")).strip()
+        if r and r not in present_rsids:
+            present_rsids.append(r)
+    missing_rsids = [r for r in all_rsids if r not in set(present_rsids)]
     dominant_gene = "MULTI"
     dominant_rsid = "MULTI"
     dominant_genotype = ""
@@ -434,6 +443,9 @@ def _summarize_prs_trait(prs_obj):
         "explanation": explanation,
         "evidence_strength": prs_obj.get("evidence_top", "Preliminary"),
         "coverage": coverage,
+        "present_variants": present_rsids,
+        "missing_variants": missing_rsids,
+        "has_any_variant": coverage > 0.0,
         "confidence": confidence,
         "evidence_status": prs_obj.get("evidence_status", "missing"),
         "evidence_snippets": prs_obj.get("evidence_snippets", []),
@@ -684,7 +696,16 @@ def build_prs_report_from_upload(genotype_path: str, categories_selected: list[s
     for pack in packs:
         if not isinstance(pack, dict):
             continue
-        prs_results.append(compute_prs_for_trait(pack, user_map))
+        prs_obj = compute_prs_for_trait(pack, user_map)
+        all_rsids = []
+        for v in pack.get("variants", []) if isinstance(pack.get("variants", []), list) else []:
+            if not isinstance(v, dict):
+                continue
+            r = str(v.get("rsid", "")).strip()
+            if r:
+                all_rsids.append(r)
+        prs_obj["all_variant_rsids"] = sorted(set(all_rsids))
+        prs_results.append(prs_obj)
 
     display_results = [r for r in prs_results if isinstance(r, dict)]
     fallback_note = ""
