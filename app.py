@@ -814,236 +814,106 @@ st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    html {
-        scroll-behavior: smooth;
-    }
-    ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-    }
-    ::-webkit-scrollbar-track {
-        background: rgba(2, 6, 23, 0.25);
-    }
-    ::-webkit-scrollbar-thumb {
-        background: rgba(148,163,184,0.35);
-        border-radius: 999px;
-        border: 2px solid transparent;
-        background-clip: padding-box;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: rgba(56,189,248,0.55);
-    }
     :root {
-        --bg-dark: #020617;
-        --bg-main: #020617;
-        --accent-blue: #3b82f6;
-        --accent-cyan: #06b6d4;
-        --accent-gold: #fbbf24;
-        --text-muted: #9ca3af;
-        --text-main: #e5e7eb;
+        --color-bg-primary: #f7f8fa;
+        --color-bg-secondary: #ffffff;
+        --color-border: #e5e7eb;
+        --color-accent: #1f3c88;
+        --color-accent-muted: #e8eefb;
+        --color-text-primary: #111827;
+        --color-text-secondary: #4b5563;
+        --radius-sm: 6px;
+        --radius-md: 10px;
+        --radius-lg: 16px;
+        --spacing-xs: 4px;
+        --spacing-sm: 8px;
+        --spacing-md: 16px;
+        --spacing-lg: 24px;
+        --spacing-xl: 40px;
+        --transition-fast: 120ms cubic-bezier(.4,0,.2,1);
+        --transition-base: 220ms cubic-bezier(.4,0,.2,1);
+        --shadow-soft: 0 4px 10px rgba(0,0,0,0.05);
+        --shadow-soft-hover: 0 8px 16px rgba(0,0,0,0.08);
+        --color-success-bg: #e8f5ec;
+        --color-success-text: #1f5134;
+        --color-warn-bg: #fcf4e5;
+        --color-warn-text: #6a4a16;
     }
+
+    html { scroll-behavior: smooth; }
+    * { box-sizing: border-box; }
+
     body {
-        background: var(--bg-main);
-        color: var(--text-main);
+        background: var(--color-bg-primary);
+        color: var(--color-text-primary);
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+        font-weight: 400;
     }
-
-    [data-testid="stAppViewContainer"] {
-        background: var(--bg-main);
-    }
-
-    [data-testid="stHeader"] {
-        background: transparent;
+    [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+        background: var(--color-bg-primary);
     }
 
     .main .block-container {
         padding-top: 0;
-        padding-bottom: 3rem;
+        padding-bottom: var(--spacing-xl);
         max-width: 1200px;
     }
-
-    /* TOP NAV */
-
-    .top-nav {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 14px 0 10px;
-        margin-bottom: 6px;
-    }
+    h1 { font-size: 32px; line-height: 1.2; font-weight: 600; margin: 0 0 var(--spacing-md); color: var(--color-text-primary); }
+    h2 { font-size: 24px; line-height: 1.3; font-weight: 600; margin: 0 0 var(--spacing-md); color: var(--color-text-primary); }
+    h3 { font-size: 18px; line-height: 1.4; font-weight: 500; margin: 0 0 var(--spacing-md); color: var(--color-text-primary); }
+    p { margin: 0 0 var(--spacing-md); }
 
     .top-nav-shell {
         position: sticky;
         top: 0;
         z-index: 1000;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        background: rgba(2, 6, 23, 0.55);
-        border-bottom: 1px solid rgba(148,163,184,0.15);
-        margin: 0 -1rem 0.8rem;
-        padding: 0.35rem 1rem;
+        background: var(--color-bg-secondary);
+        border-bottom: 1px solid var(--color-border);
+        margin: 0 -1rem var(--spacing-md);
+        padding: var(--spacing-sm) var(--spacing-md);
     }
-
-    .top-nav-left {
+    .top-nav {
         display: flex;
         align-items: center;
-        gap: 10px;
+        justify-content: space-between;
+        padding: var(--spacing-sm) 0;
     }
-
-    .nav-logo-container {
+    .top-nav-left, .nav-logo-container, .nav-button-container {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: var(--spacing-md);
     }
-
+    .logo-wrap { width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; }
+    .logo-wrap svg { width: 48px; height: 48px; }
+    .vg-mark-wrap { height: 200px; display: flex; align-items: center; justify-content: center; }
     .logo-title {
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        font-size: 1.05rem;
-        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        font-size: 16px;
+        color: var(--color-text-primary);
     }
-
     .logo-sub {
-        font-size: 0.75rem;
-        color: #9ca3af;
-        margin-top: -4px;
+        font-size: 13px;
+        color: var(--color-text-secondary);
     }
-
-    .nav-button-container {
-        display: flex;
-        justify-content: flex-end;
-        gap: 20px;
-        padding-top: 8px;
-    }
-
-    /* G shaped DNA style mark */
-
-    .logo-mark {
-        width: 32px;
-        height: 32px;
-        border-radius: 999px;
-        background: #020617;
-        border: 2px solid #3b82f6;
-        position: relative;
-        box-shadow: 0 6px 14px rgba(15,23,42,0.45);
-    }
-
-    .logo-g-arc {
-        position: absolute;
-        inset: 4px;
-        border-radius: 999px;
-        border: 2px solid #3b82f6;
-        border-right-color: transparent;
-    }
-
-    .logo-g-cut {
-        position: absolute;
-        right: 4px;
-        top: 50%;
-        width: 8px;
-        height: 2px;
-        background: #020617;
-        transform: translateY(-50%);
-    }
-
-    .logo-helix-line {
-        position: absolute;
-        top: 6px;
-        bottom: 6px;
-        left: 50%;
-        width: 2px;
-        border-radius: 999px;
-        transform: translateX(-7px);
-        background: linear-gradient(180deg, #3b82f6, #22c55e);
-    }
-
-    .logo-helix-line:nth-child(2) {
-        transform: translateX(5px);
-        background: linear-gradient(180deg, #8b5cf6, #fbbf24);
-    }
-
-    .logo-rung {
-        position: absolute;
-        left: 50%;
-        width: 14px;
-        height: 2px;
-        background: #e5e7eb;
-        border-radius: 999px;
-        transform: translateX(-50%);
-    }
-
-    .logo-rung:nth-child(1) { top: 9px; }
-    .logo-rung:nth-child(2) { top: 16px; }
-    .logo-rung:nth-child(3) { top: 23px; }
-
-    .logo-text-main {
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        font-size: 0.86rem;
-        text-transform: uppercase;
-    }
-
-    .logo-text-sub {
-        font-size: 0.75rem;
-        color: #9ca3af;
-        margin-top: -2px;
-    }
-
-    /* Nav buttons (top right) */
-
-    .nav-container {
-        display: flex;
-        justify-content: flex-end;
-        gap: 18px;
-        padding-top: 4px;
-    }
-
-    .stButton>button {
-        background: transparent;
-        border: none;
-        color: #e5e7eb; /* light text on dark background */
-        padding: 2px 0;
-        font-size: 0.9rem;
-        font-weight: 500;
-        border-bottom: 2px solid transparent;
-        border-radius: 0;
-        transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .stButton>button:hover {
-        color: #ffffff; /* pure white on hover */
-        border-bottom-color: #38bdf8;
-        transform: translateY(-1px);
-        box-shadow: 0 8px 24px rgba(56,189,248,0.16), inset 0 -1px 0 rgba(56,189,248,0.55);
-        cursor: pointer;
-    }
-
-    .nav-active > button {
-        border-bottom-color: #3b82f6 !important;
-        color: #ffffff !important;
-    }
-
-    /* HERO BAND */
 
     .hero-band {
-        background: radial-gradient(circle at 0% 0%, #0f172a, #020617 48%);
-        color: #e5e7eb;
-        border-radius: 0 0 40px 40px;
-        padding: 40px 56px 64px;
-        margin: 0 -3rem 40px;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.55);
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: var(--spacing-xl);
+        margin: 0 0 var(--spacing-xl);
+        box-shadow: var(--shadow-soft);
     }
-
     @media (max-width: 800px) {
-        .hero-band {
-            margin: 0 -1rem 32px;
-            padding: 28px 24px 44px;
-        }
+        .hero-band { padding: var(--spacing-lg); }
     }
 
     .hero-grid {
         display: flex;
-        gap: 56px;
+        gap: var(--spacing-xl);
         align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
@@ -1051,700 +921,261 @@ st.markdown(
 
     .hero-chip {
         display: inline-block;
-        padding: 4px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.5);
-        font-size: 0.78rem;
+        padding: var(--spacing-xs) var(--spacing-sm);
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--color-border);
+        background: var(--color-accent-muted);
+        color: var(--color-accent);
+        font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.12em;
-        margin-bottom: 12px;
-        color: #e5e7eb;
+        margin-bottom: var(--spacing-sm);
     }
 
     .hero-title {
-        font-size: 2.4rem;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        margin-bottom: 8px;
+        font-size: 32px;
+        line-height: 1.2;
+        font-weight: 600;
+        margin-bottom: var(--spacing-md);
+        color: var(--color-text-primary);
     }
 
     .hero-title span {
-        background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
-        -webkit-background-clip: text;
-        color: transparent;
+        color: var(--color-accent);
     }
 
     .hero-sub {
-        font-size: 0.98rem;
+        font-size: 15px;
         max-width: 560px;
-        color: #cbd5f5;
-        margin-bottom: 1.0rem;
+        color: var(--color-text-secondary);
+        margin-bottom: var(--spacing-md);
     }
 
     .hero-note {
-        font-size: 0.8rem;
-        color: #9ca3af;
+        font-size: 13px;
+        color: var(--color-text-secondary);
         max-width: 540px;
     }
-
-    /* DNA CARD (G-Helix inspired) */
 
     .hero-dna-card {
         min-width: 260px;
         max-width: 320px;
-        border-radius: 24px;
-        background:
-            radial-gradient(circle at 10% 0%, #1f2937, transparent 55%),
-            radial-gradient(circle at 90% 100%, rgba(251,191,36,0.25), transparent 50%),
-            #020617;
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        padding: 18px 18px 20px;
-        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        border-radius: var(--radius-md);
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        padding: var(--spacing-lg);
+        transition: all var(--transition-base);
+        box-shadow: var(--shadow-soft);
     }
 
     .hero-dna-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 16px 30px rgba(15,23,42,0.7);
-        border-color: rgba(251,191,36,0.8);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-soft-hover);
     }
 
     .hero-dna-title {
-        font-size: 0.92rem;
-        font-weight: 600;
-        margin-bottom: 4px;
+        font-size: 18px;
+        font-weight: 500;
+        margin-bottom: var(--spacing-xs);
+        color: var(--color-text-primary);
     }
 
     .hero-dna-sub {
-        font-size: 0.8rem;
-        color: #9ca3af;
-        margin-bottom: 12px;
+        font-size: 13px;
+        color: var(--color-text-secondary);
+        margin-bottom: var(--spacing-sm);
     }
-
-    .vg-mark-wrap {
-        height: 200px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
     .hero-dna-card img {
         max-height: 240px;
         object-fit: contain;
-        filter: drop-shadow(0 0 20px rgba(80, 140, 255, 0.45));
-        margin-top: 8px;
+        margin-top: var(--spacing-sm);
         width: 100%;
         display: block;
     }
 
-    /* GENERAL SECTIONS */
-
     .section-title {
-        font-size: 1.4rem;
+        font-size: 24px;
+        line-height: 1.3;
         font-weight: 600;
-        margin-bottom: 0.4rem;
-        color: var(--text-main);
+        margin-bottom: var(--spacing-md);
+        color: var(--color-text-primary);
     }
 
     .section-sub {
-        font-size: 0.94rem;
-        color: #6b7280;
-        margin-bottom: 1.0rem;
+        font-size: 15px;
+        color: var(--color-text-secondary);
+        margin-bottom: var(--spacing-md);
     }
-
-    .home-section {
-        margin-top: 0.5rem;
-        margin-bottom: 2.5rem;
-    }
-
-    .newsletter-modal {
-        border-radius: 16px;
-        padding: 14px 16px 12px;
-        border: 1px solid #e5e7eb;
-        background: #f9fafb;
-        box-shadow: 0 20px 40px rgba(15,23,42,0.12);
-        color: var(--text-main);
-    }
-
-    .newsletter-title {
-        font-size: 1.02rem;
-        font-weight: 600;
-        margin-bottom: 0.2rem;
-    }
-
-    .newsletter-sub {
-        font-size: 0.86rem;
-        color: #6b7280;
-        margin-bottom: 0.6rem;
-    }
-
-    .small-label {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.09em;
-        color: #6b7280;
-        font-weight: 600;
-        margin-bottom: 0.3rem;
-    }
-
-    /* FEATURE / INFO CARDS */
+    .home-section { margin: 0 0 var(--spacing-xl); }
 
     .feature-row {
         display: flex;
-        gap: 18px;
+        gap: var(--spacing-md);
         flex-wrap: wrap;
-        margin-top: 1.2rem;
+        margin-top: var(--spacing-md);
     }
 
-    .feature-card {
+    .feature-card, .how-step, .bio-card, .who-card, .roadmap-card, .newsletter-modal, .section-light {
         flex: 1 1 220px;
-        background: #ffffff;
-        border-radius: 16px;
-        border: 1px solid #e5e7eb;
-        padding: 14px 16px 16px;
-        box-shadow: 0 8px 18px rgba(148, 163, 184, 0.18);
-        color: var(--text-main);
-        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        background: var(--color-bg-secondary);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--color-border);
+        padding: var(--spacing-lg);
+        box-shadow: var(--shadow-soft);
+        color: var(--color-text-primary);
+        transition: all var(--transition-base);
     }
-
-    .feature-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 18px 36px rgba(15,23,42,0.72);
-        border-color: #cbd5f5;
+    .feature-card:hover, .how-step:hover, .bio-card:hover, .who-card:hover, .roadmap-card:hover, .newsletter-modal:hover, .section-light:hover, .chat-box:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-soft-hover);
     }
-
-/* FIX HOW-SECTION TITLES */
-.how-title,
-.how-label,
-.how-title *,
-.how-label * {
-    color: #111827 !important;
-}
-
-/* FIX NEWSLETTER SECTION TEXT */
-.newsletter-title,
-.newsletter-title *,
-.newsletter-sub,
-.newsletter-sub * {
-    color: #111827 !important;
-}
-
-    .feature-label {
-        font-size: 0.78rem;
+    .newsletter-title { font-size: 18px; font-weight: 500; margin-bottom: var(--spacing-xs); color: var(--color-text-primary); }
+    .newsletter-sub { font-size: 13px; color: var(--color-text-secondary); margin-bottom: var(--spacing-sm); }
+    .small-label, .feature-label, .how-label, .roadmap-label {
+        font-size: 13px;
         text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: #9ca3af;
-        margin-bottom: 0.3rem;
+        letter-spacing: 0.08em;
+        color: var(--color-text-secondary);
+        font-weight: 500;
+        margin-bottom: var(--spacing-xs);
     }
-
-    .feature-title {
-        font-size: 0.98rem;
-        font-weight: 600;
-        margin-bottom: 0.3rem;
-        color: var(--text-main);
+    .feature-title, .roadmap-title, .who-title, .bio-name, .how-step-title {
+        font-size: 18px;
+        line-height: 1.4;
+        font-weight: 500;
+        margin-bottom: var(--spacing-xs);
+        color: var(--color-text-primary);
     }
-
-    .feature-body {
-        font-size: 0.86rem;
-        color: #4b5563;
+    .feature-body, .bio-role, .hero-note {
+        font-size: 15px;
+        color: var(--color-text-secondary);
     }
-
-/* FORCE DARK TEXT INSIDE LIGHT CARDS */
-.feature-card,
-.feature-card * {
-    color: #111827 !important;
-}
-
-.how-step,
-.how-step * {
-    color: #111827 !important;
-}
-
-.bio-card,
-.bio-card * {
-    color: #111827 !important;
-}
-
-.who-card,
-.who-card * {
-    color: #111827 !important;
-}
-    /* HOW IT WORKS STRIP */
-
-    .how-band {
-        margin-top: 2.4rem;
-        border-radius: 20px;
-        background: linear-gradient(135deg, #f9fafb, #eef2ff);
-        border: 1px solid #e0e7ff;
-        padding: 16px 18px 18px;
-        color: var(--text-main);
-    }
-
-    .how-label {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: #6b7280;
-        margin-bottom: 0.3rem;
-        font-weight: 600;
-    }
-
-    .how-title {
-        font-size: 1.05rem;
-        font-weight: 600;
-        margin-bottom: 0.4rem;
-    }
-
-    .how-row {
-        display: flex;
-        gap: 18px;
-        flex-wrap: wrap;
-    }
-
-    .how-step {
-        flex: 1 1 190px;
-        background: #ffffff;
-        border-radius: 14px;
-        border: 1px solid #e5e7ff;
-        padding: 10px 12px 12px;
-        font-size: 0.84rem;
-        color: #4b5563;
-        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-    }
-
-    .how-step:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 22px rgba(148,163,184,0.35);
-        border-color: #c7d2fe;
-    }
-
+    .bio-role { margin-bottom: var(--spacing-sm); }
+    .who-row, .how-row { display: flex; gap: var(--spacing-md); flex-wrap: wrap; margin-top: var(--spacing-md); }
+    .who-card, .how-step { flex: 1 1 220px; }
     .how-step-number {
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: #6366f1;
-        margin-bottom: 0.1rem;
-    }
-
-    .how-step-title {
-        font-size: 0.9rem;
+        display: inline-block;
+        font-size: 13px;
         font-weight: 600;
-        margin-bottom: 0.25rem;
-        color: var(--text-main);
+        color: var(--color-accent);
+        margin-bottom: var(--spacing-xs);
     }
-
-    /* FOUNDER + WHO IT'S FOR + ROADMAP */
-
-    .bio-card {
-        background: #ffffff;
-        border-radius: 16px;
-        border: 1px solid #e5e7eb;
-        padding: 14px 16px 16px;
-        font-size: 0.9rem;
-        box-shadow: 0 8px 18px rgba(148, 163, 184, 0.18);
-        color: var(--text-main);
-        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    .how-band {
+        margin-top: var(--spacing-xl);
+        border-radius: var(--radius-lg);
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        padding: var(--spacing-lg);
+        box-shadow: var(--shadow-soft);
     }
-
-    .bio-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 24px rgba(148,163,184,0.35);
-        border-color: #cbd5f5;
-    }
-
-    .bio-name {
-        font-weight: 600;
-        margin-bottom: 0.2rem;
-        color: var(--text-main);
-    }
-
-    .bio-role {
-        font-size: 0.82rem;
-        color: #6b7280;
-        margin-bottom: 0.6rem;
-    }
-
-    .who-row {
-        display: flex;
-        gap: 18px;
-        flex-wrap: wrap;
-        margin-top: 0.8rem;
-    }
-
-    .who-card {
-        flex: 1 1 220px;
-        background: #f9fafb;
-        border-radius: 14px;
-        border: 1px solid #e5e7eb;
-        padding: 10px 12px 12px;
-        font-size: 0.86rem;
-        color: #4b5563;
-        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-    }
-
-    .who-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 22px rgba(148,163,184,0.35);
-        border-color: #d1d5db;
-    }
-
-    .who-title {
-        font-weight: 600;
-        margin-bottom: 0.2rem;
-        color: var(--text-main);
-    }
-
-    .roadmap-card {
-        background: #020617;
-        color: #e5e7eb;
-        border-radius: 18px;
-        padding: 14px 16px 16px;
-        border: 1px solid rgba(148,163,184,0.5);
-        font-size: 0.86rem;
-        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-    }
-
-    .roadmap-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 16px 32px rgba(15,23,42,0.8);
-        border-color: rgba(59,130,246,0.7);
-    }
-
-    .roadmap-label {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: #9ca3af;
-        margin-bottom: 0.2rem;
-    }
-
-    .roadmap-title {
-        font-size: 0.98rem;
-        font-weight: 600;
-        margin-bottom: 0.4rem;
-    }
-    /* FINAL FIX: Ensure How-Title is dark */
     .how-title {
-        color: #111827 !important;
+        font-size: 24px;
+        line-height: 1.3;
+        font-weight: 600;
+        margin-bottom: var(--spacing-md);
+        color: var(--color-text-primary);
     }
-/* Global site footer */
-.site-footer {
-    margin-top: 40px;
-    padding: 18px 0 10px;
-    border-top: 1px solid rgba(148, 163, 184, 0.4);
-    font-size: 0.8rem;
-    color: #9ca3af;
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    opacity: 0.9;
-}
-.site-footer a {
-    color: #9ca3af;
-    text-decoration: none;
-}
-.site-footer a:hover {
-    text-decoration: underline;
-    color: #e5e7eb;
-}
+    .pipeline-diagram { margin-top: var(--spacing-lg); border-top: 1px solid var(--color-border); padding-top: var(--spacing-md); }
+    .pipeline-flow { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: var(--spacing-sm); }
+    .pipe-step { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--spacing-sm); font-size: 13px; background: var(--color-bg-primary); }
+    .pipe-icon { display: none; }
+    @media (max-width: 900px) { .pipeline-flow { grid-template-columns: 1fr 1fr; } }
 
-/* Smooth section fade-in */
-.hero,
-.home-section,
-.section-light,
-.how-band,
-.chat-box,
-.feature-card {
-    animation: fadeUp 0.35s ease-out;
-}
-
-@keyframes fadeUp {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
+    .roadmap-card { background: var(--color-bg-secondary); }
+    .site-footer {
+        margin-top: var(--spacing-xl);
+        padding: var(--spacing-md) 0 var(--spacing-sm);
+        border-top: 1px solid var(--color-border);
+        font-size: 13px;
+        color: var(--color-text-secondary);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--spacing-sm);
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+    .site-footer a { color: var(--color-accent); text-decoration: none; }
+    .site-footer a:hover { text-decoration: underline; }
+
+    .stButton > button {
+        border-radius: var(--radius-sm) !important;
+        border: 1px solid var(--color-border) !important;
+        background: var(--color-bg-secondary) !important;
+        color: var(--color-text-primary) !important;
+        transition: all var(--transition-base);
+        box-shadow: none !important;
     }
-}
-
-/* Button hover transitions */
-.stButton > button {
-    transition: background-color 0.18s ease, color 0.18s ease,
-                transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.stButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.35);
-}
-
-/* Card hover transitions */
-.feature-card,
-.how-step,
-.trait-card,
-.chat-box {
-    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out,
-                border-color 0.18s ease-out, background-color 0.18s ease-out;
-}
-
-.feature-card:hover,
-.how-step:hover,
-.trait-card:hover,
-.chat-box:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.4);
-    border-color: rgba(148, 163, 184, 0.7);
-}
-
-/* Navbar hover refinement */
-.nav-btn,
-.nav-btn-active {
-    transition: color 0.16s ease, border-bottom-color 0.16s ease,
-                transform 0.16s ease;
-}
-
-.nav-btn:hover,
-.nav-btn-active:hover {
-    transform: translateY(-1px);
-}
-
-/* ---------- Microanimations + Page Transitions ---------- */
-
-/* Page fade / slide on navigation (Streamlit rerun, but looks like a transition) */
-.page-wrap {
-  animation: pageFade 240ms ease-out;
-}
-
-@keyframes pageFade {
-  from { opacity: 0; transform: translateY(6px); filter: blur(1px); }
-  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
-}
-
-/* Premium button microinteractions */
-.stButton > button {
-  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, color 180ms ease;
-  will-change: transform;
-}
-
-.stButton > button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.45);
-}
-
-.stButton > button:active {
-  transform: translateY(0px) scale(0.98);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.35);
-}
-
-/* Card + panel hover polish */
-.feature-card, .how-step, .trait-card, .chat-box, .section-light {
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-  will-change: transform;
-}
-
-.feature-card:hover, .how-step:hover, .trait-card:hover, .chat-box:hover, .section-light:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.45);
-  border-color: rgba(148, 163, 184, 0.75);
-}
-
-/* Navbar microinteraction (bolder + subtle lift) */
-.nav-btn {
-  font-weight: 600 !important;
-  letter-spacing: 0.2px;
-  transition: color 160ms ease, border-bottom-color 160ms ease, transform 160ms ease;
-}
-
-.nav-btn:hover {
-  transform: translateY(-1px);
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-/* NAV BUTTON CONTRAST FIX: make top-nav buttons readable on dark background */
-.nav-button-container .stButton > button {
-    background: transparent !important;
-    border: none !important;
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.2px;
-    border-bottom: 2px solid transparent !important;
-    border-radius: 0 !important;
-    padding: 2px 0 !important;
-}
-
-.nav-button-container .stButton > button:hover {
-    color: #ffffff !important;
-    border-bottom-color: #38bdf8 !important;
-    transform: translateY(-1px);
-}
-
-.logo-wrap {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 60px;
-    height: 60px;
-    cursor: pointer;
-    transition: transform 0.16s ease, filter 0.16s ease;
-}
-
-.logo-wrap svg {
-    width: 56px;
-    height: 56px;
-    filter: drop-shadow(0 0 8px rgba(56,189,248,0.38));
-}
-
-.logo-wrap:hover {
-    transform: translateY(-1px);
-    filter: drop-shadow(0 0 14px rgba(56,189,248,0.60));
-}
-
-.scroll-cue {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-top: 0.45rem;
-    margin-bottom: 0.6rem;
-    color: rgba(148,163,184,0.85);
-    animation: cuePulse 1.9s ease-in-out infinite;
-}
-
-.scroll-cue svg {
-    width: 18px;
-    height: 18px;
-    filter: drop-shadow(0 0 6px rgba(56,189,248,0.45));
-}
-
-@keyframes cuePulse {
-    0%, 100% { opacity: 0.35; transform: translateY(0px); }
-    50% { opacity: 0.95; transform: translateY(5px); }
-}
-
-div[data-testid="stChatMessage"] {
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-div[data-testid="stChatMessage"]:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 22px rgba(15,23,42,0.35);
-}
-
-@media (max-width: 800px) {
-    .scroll-cue {
-        display: none;
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-soft-hover) !important;
+        border-color: var(--color-accent) !important;
     }
-}
-
-/* Premium dark theme overrides (final layer) */
-:root {
-    --bg-main: #050617;
-    --bg-2: #070A22;
-    --bg-3: #0B1035;
-    --panel: rgba(17, 24, 39, 0.55);
-    --text-main: #EAF0FF;
-    --text-muted: rgba(226,232,240,0.72);
-    --border: rgba(148,163,184,0.22);
-    --accent-cyan: #38BDF8;
-    --accent-violet: #A78BFA;
-    --accent-blue: #60A5FA;
-}
-
-body, [data-testid="stAppViewContainer"] {
-    background:
-      radial-gradient(circle at 10% 0%, #101A4A 0%, transparent 45%),
-      radial-gradient(circle at 90% 20%, rgba(167,139,250,0.20) 0%, transparent 40%),
-      linear-gradient(180deg, #050617, #050617) !important;
-    color: var(--text-main) !important;
-    line-height: 1.55;
-}
-
-.hero-band {
-    background: radial-gradient(circle at 0% 0%, rgba(18,27,74,0.75), rgba(5,6,23,0.96) 50%) !important;
-}
-
-.hero-title {
-    font-size: 2.62rem;
-}
-
-.hero-sub, .hero-note, .section-sub, .logo-sub, .feature-label, .roadmap-label {
-    color: var(--text-muted) !important;
-}
-
-.feature-card, .how-step, .bio-card, .who-card, .section-light, .newsletter-modal, .how-band {
-    background: rgba(255,255,255,0.06) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text-main) !important;
-}
-
-.feature-card *, .how-step *, .bio-card *, .who-card *, .section-light *, .newsletter-modal *, .how-band * {
-    color: var(--text-main) !important;
-}
-
-.feature-body, .bio-role {
-    color: var(--text-muted) !important;
-}
-
-[data-testid="stTextInput"] input:focus,
-[data-testid="stTextArea"] textarea:focus,
-[data-testid="stSelectbox"] div:focus-within {
-    outline: none !important;
-    box-shadow: 0 0 0 2px rgba(56,189,248,0.38) !important;
-    border-color: rgba(56,189,248,0.5) !important;
-}
-
-.pipeline-diagram {
-    margin-top: 1rem;
-    border-top: 1px solid var(--border);
-    padding-top: 0.8rem;
-}
-
-.pipeline-flow {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0,1fr));
-    gap: 0.7rem;
-    position: relative;
-}
-
-.pipeline-flow::before {
-    content: "";
-    position: absolute;
-    top: 15px;
-    left: 6%;
-    right: 6%;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(56,189,248,0.10), rgba(167,139,250,0.55), rgba(96,165,250,0.10));
-    z-index: 0;
-}
-
-.pipe-step {
-    position: relative;
-    z-index: 1;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 0.55rem 0.65rem;
-    font-size: 0.8rem;
-}
-
-.pipe-icon {
-    font-size: 0.95rem;
-    margin-bottom: 0.2rem;
-    opacity: 0.95;
-}
-
-@media (max-width: 900px) {
-    .pipeline-flow {
-        grid-template-columns: 1fr 1fr;
+    .stButton > button:disabled {
+        background: var(--color-bg-primary) !important;
+        color: var(--color-text-secondary) !important;
+        border-color: var(--color-border) !important;
+        cursor: not-allowed !important;
+        opacity: 0.75;
+        transform: none !important;
+        box-shadow: none !important;
     }
-    .pipeline-flow::before {
-        display: none;
+
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea,
+    [data-testid="stSelectbox"] div[data-baseweb="select"] {
+        border-radius: var(--radius-sm) !important;
+        border: 1px solid var(--color-border) !important;
+        transition: all var(--transition-fast);
     }
-}
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stTextArea"] textarea:focus,
+    [data-testid="stSelectbox"] div:focus-within {
+        outline: none !important;
+        border-color: var(--color-accent) !important;
+        box-shadow: 0 0 0 2px var(--color-accent-muted) !important;
+    }
+
+    .nav-button-container .stButton > button {
+        border: 1px solid transparent !important;
+        background: transparent !important;
+        color: var(--color-text-primary) !important;
+        padding: var(--spacing-xs) var(--spacing-sm) !important;
+    }
+    .nav-button-container .stButton > button:hover {
+        border-color: var(--color-border) !important;
+        box-shadow: var(--shadow-soft) !important;
+    }
+
+    .scroll-cue { display: none; }
+    .page-wrap { animation: none; }
+    .evidence-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--color-border);
+        font-size: 13px;
+        margin-bottom: var(--spacing-xs);
+    }
+    .evidence-badge.found {
+        color: var(--color-success-text);
+        background: var(--color-success-bg);
+    }
+    .evidence-badge.missing {
+        color: var(--color-warn-text);
+        background: var(--color-warn-bg);
+    }
+    .skeleton {
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-lg);
+        background: var(--color-bg-secondary);
+        color: var(--color-text-secondary);
+        margin-bottom: var(--spacing-md);
+    }
+    .founder-highlights {
+        margin-top: var(--spacing-sm);
+        font-size: 13px;
+        color: var(--color-text-secondary);
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1821,6 +1252,10 @@ begin_page_wrap()
 # ---------- Newsletter state ----------
 if "hide_newsletter" not in st.session_state:
     st.session_state.hide_newsletter = False
+if "report_processing" not in st.session_state:
+    st.session_state.report_processing = False
+if "evidence_processing" not in st.session_state:
+    st.session_state.evidence_processing = False
 
 
 def newsletter_block(location_text: str):
@@ -1834,9 +1269,9 @@ def newsletter_block(location_text: str):
         )
         st.markdown(
             "<div class='newsletter-modal'>"
-            "<div class='newsletter-title'>Join the VivaGene early access list</div>"
-            "<div class='newsletter-sub'>Get updates as the platform evolves and, in a full launch, "
-            "receive your reports securely by email.</div>"
+            "<div class='newsletter-title'>Get VivaGene project updates</div>"
+            "<div class='newsletter-sub'>Receive updates on trait curation and evidence coverage. "
+            "Optional email report delivery is planned for future releases.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -2047,21 +1482,19 @@ if page == "Home":
             <div>
               <div class="hero-chip">Evidence-first genomics</div>
               <div class="hero-title">
-                Genetics, translated for <span>everyday clarity.</span>
+                Genomics reporting for <span>clear interpretation.</span>
               </div>
               <div class="hero-sub">
-                VivaGene turns raw genotype files into research-backed trait summaries with clear language, confidence signals,
-                and citation transparency.
+                VivaGene converts raw genotype files into structured trait summaries with explicit confidence, coverage, and evidence links.
               </div>
               <div class="hero-note">
-                Our current trait panel covers Nutrition, Neurobehavior, and Fitness. Results are educational, cautious, and designed
-                to make complex genomics easier to understand. Genes are one input, not a destiny.
+                Current support focuses on Nutrition, Neurobehavior, and Fitness traits. Output is educational and non-diagnostic.
               </div>
             </div>
             <div class="hero-dna-card">
-              <div class="hero-dna-title">VG Helix Signature</div>
+              <div class="hero-dna-title">VivaGene Mark</div>
               <div class="hero-dna-sub">
-                The VivaGene mark stays fixed while the internal DNA rotates, representing stable structure with evolving evidence.
+                Static visual identifier for the report workspace.
               </div>
               {render_vg_helix_svg()}
             </div>
@@ -2079,16 +1512,6 @@ if page == "Home":
     with cta_col2:
         if st.button("Open Lifestyle Q&A", key="hero_chatbot"):
             st.session_state.active_page = "Lifestyle Q&A"
-    st.markdown(
-        """
-        <div class="scroll-cue" aria-hidden="true">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # Why VivaGene exists
     col_left, col_right = st.columns([1.4, 1.0])
@@ -2110,7 +1533,7 @@ if page == "Home":
     # Why choose VivaGene
     st.markdown('<div class="section-title">Why choose VivaGene?</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-sub">A calm, evidence-first experience for people who want understandable genetics without overclaiming.</div>',
+        '<div class="section-sub">A structured interface for educational genomics interpretation with evidence boundaries.</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -2118,10 +1541,9 @@ if page == "Home":
         <div class="feature-row">
           <div class="feature-card">
             <div class="feature-label">Founder story</div>
-            <div class="feature-title">Designed by a future AI geneticist</div>
+            <div class="feature-title">Built as an independent research project</div>
             <div class="feature-body">
-              Built by Anjali Nalla, VivaGene combines student-led research training with a practical focus on clear,
-              responsible genomic communication.
+              Developed by Anjali Nalla to support careful communication of genomic trait tendencies for education.
             </div>
           </div>
           <div class="feature-card">
@@ -2135,8 +1557,7 @@ if page == "Home":
             <div class="feature-label">Lifestyle focus</div>
             <div class="feature-title">DNA as one piece of the puzzle</div>
             <div class="feature-body">
-              Results are framed as tendencies that may interact with sleep, nutrition, focus, and training.
-              They are educational and never a diagnosis.
+              Trait output is framed as probabilistic tendencies and does not provide diagnosis or treatment guidance.
             </div>
           </div>
         </div>
@@ -2174,10 +1595,10 @@ if page == "Home":
           </div>
           <div class="pipeline-diagram">
             <div class="pipeline-flow">
-              <div class="pipe-step"><div class="pipe-icon">⬆</div><div>Upload genotype</div></div>
-              <div class="pipe-step"><div class="pipe-icon">🧬</div><div>Match curated variants</div></div>
-              <div class="pipe-step"><div class="pipe-icon">📚</div><div>Bind to evidence</div></div>
-              <div class="pipe-step"><div class="pipe-icon">✨</div><div>Generate plain-language summary</div></div>
+              <div class="pipe-step"><div class="pipe-icon">1</div><div>Upload genotype</div></div>
+              <div class="pipe-step"><div class="pipe-icon">2</div><div>Match curated variants</div></div>
+              <div class="pipe-step"><div class="pipe-icon">3</div><div>Bind to evidence</div></div>
+              <div class="pipe-step"><div class="pipe-icon">4</div><div>Generate plain-language summary</div></div>
             </div>
           </div>
         </div>
@@ -2211,7 +1632,7 @@ if page == "Home":
             """
             <div class="bio-card">
               <div class="bio-name">Anjali Nalla</div>
-              <div class="bio-role">Student and aspiring AI geneticist</div>
+              <div class="bio-role">Student researcher in computational genomics</div>
               <div>
                 I'm Anjali Nalla, a high school student with hands-on experience in genetics, neuroscience, and clinical settings.
                 My background includes Johns Hopkins affiliated research focused on rare disease biology, internships that explore
@@ -2271,7 +1692,7 @@ if page == "Home":
         )
     st.markdown(
         """
-        <div style="margin-top: 0.8rem; font-size: 0.86rem; color: #e5e7eb;">
+        <div class="founder-highlights">
           <strong>Founder highlights</strong><br/>
           · Johns Hopkins affiliated research in rare disease biology<br/>
           · Clinical volunteering on a neuro floor and in hospice settings<br/>
@@ -2372,10 +1793,17 @@ elif page == "Upload & Report":
             step=1,
             help="How many traits to query from Europe PMC in one refresh run.",
         )
-        refresh_all_evidence = st.button("Build/Refresh Evidence Corpus (Europe PMC)")
+        refresh_all_evidence = st.button(
+            "Processing..." if st.session_state.evidence_processing else "Build/Refresh Evidence Corpus (Europe PMC)",
+            disabled=bool(st.session_state.report_processing or st.session_state.evidence_processing),
+        )
         if refresh_all_evidence:
+            st.session_state.evidence_processing = True
+            progress = st.progress(5, text="Initializing Europe PMC refresh...")
             with st.spinner("Building local evidence corpus..."):
+                progress.progress(45, text="Querying and writing local corpus...")
                 rc, out, err = run_evidence_builder(max_traits=int(max_refresh_traits))
+            progress.progress(100, text="Evidence corpus refresh complete.")
             if rc == 0:
                 st.success("Evidence corpus refresh completed.")
             else:
@@ -2385,14 +1813,24 @@ elif page == "Upload & Report":
                     st.code(out, language="json")
                 if err:
                     st.code(err, language="text")
+            st.session_state.evidence_processing = False
             st.rerun()
 
-        generate = st.button("Run analysis")
+        generate = st.button(
+            "Processing..." if st.session_state.report_processing else "Run analysis",
+            disabled=bool(st.session_state.report_processing or st.session_state.evidence_processing),
+        )
 
         if generate:
             if not uploaded:
                 st.warning("Please upload a raw genotype .txt file first.")
             else:
+                st.session_state.report_processing = True
+                skeleton_slot = st.empty()
+                skeleton_slot.markdown(
+                    "<div class='skeleton'>Preparing report components... parsing upload, matching traits, and checking evidence.</div>",
+                    unsafe_allow_html=True,
+                )
                 temp_path = BASE_DIR / "uploaded_genome.txt"
                 with open(temp_path, "wb") as f:
                     f.write(uploaded.getvalue())
@@ -2486,12 +1924,12 @@ elif page == "Upload & Report":
                                     )
                                     if evidence_status == "found":
                                         st.markdown(
-                                            "<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:#16653433;color:#dcfce7;border:1px solid #22c55e;'>✅ Evidence Found</span>",
+                                            "<span class='evidence-badge found'>✅ Evidence Found</span>",
                                             unsafe_allow_html=True,
                                         )
                                     else:
                                         st.markdown(
-                                            "<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:#a1620733;color:#fde68a;border:1px solid #f59e0b;'>⚠️ Evidence not found (query logged)</span>",
+                                            "<span class='evidence-badge missing'>⚠️ Evidence not found (query logged)</span>",
                                             unsafe_allow_html=True,
                                         )
                                     if evidence_status == "found" and life_impact and len(citations) >= 1:
@@ -2557,9 +1995,17 @@ elif page == "Upload & Report":
                                                 st.caption(f"Hits: {hits}")
                                     trait_id_for_fetch = str(trait.get("trait_id", "")).strip()
                                     if trait_id_for_fetch:
-                                        if st.button("Fetch evidence for this trait", key=f"fetch_{trait_id_for_fetch}"):
+                                        if st.button(
+                                            "Processing..." if st.session_state.evidence_processing else "Fetch evidence for this trait",
+                                            key=f"fetch_{trait_id_for_fetch}",
+                                            disabled=bool(st.session_state.evidence_processing or st.session_state.report_processing),
+                                        ):
+                                            st.session_state.evidence_processing = True
+                                            progress_t = st.progress(10, text=f"Refreshing evidence for {trait_id_for_fetch}...")
                                             with st.spinner(f"Refreshing evidence for {trait_id_for_fetch}..."):
+                                                progress_t.progress(55, text="Querying Europe PMC...")
                                                 rc_t, out_t, err_t = run_evidence_builder(max_traits=1, trait_id=trait_id_for_fetch)
+                                            progress_t.progress(100, text="Trait evidence refresh complete.")
                                             if rc_t == 0:
                                                 st.success(f"Evidence refresh complete for {trait_id_for_fetch}.")
                                             else:
@@ -2569,6 +2015,7 @@ elif page == "Upload & Report":
                                                     st.code(out_t, language="json")
                                                 if err_t:
                                                     st.code(err_t, language="text")
+                                            st.session_state.evidence_processing = False
                                             st.rerun()
 
                         # Runtime integrity checks
@@ -2615,8 +2062,11 @@ elif page == "Upload & Report":
                                 f"In a future deployed version, this report could also be sent securely to {email_for_result.strip()} "
                                 "from a VivaGene email address."
                             )
+                    skeleton_slot.empty()
+                    st.session_state.report_processing = False
 
                 except Exception as e:
+                    st.session_state.report_processing = False
                     st.error(f"Something went wrong while generating the report: {e}")
                     with st.expander("Debug traceback"):
                         st.code(traceback.format_exc(), language="text")
