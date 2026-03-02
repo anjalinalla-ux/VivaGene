@@ -2,6 +2,8 @@ import streamlit as st
 import csv
 import json
 import re
+import subprocess
+import sys
 import traceback
 from io import BytesIO
 from pathlib import Path
@@ -266,9 +268,12 @@ def generate_pdf_report_bytes(report_obj: dict) -> bytes:
                         year = str(c.get("year", "")).strip()
                         story.append(Paragraph(f"- {ident} | {title} {f'({year})' if year else ''}", styles["BodyText"]))
         else:
+            prov = t.get("search_provenance", {}) if isinstance(t.get("search_provenance", {}), dict) else {}
+            query_txt = str(prov.get("query", "")).strip()
+            prov_txt = f" Query logged: {query_txt}" if query_txt else ""
             story.append(
                 Paragraph(
-                    "Evidence not found in the local corpus yet. This trait will display citations once the study pack is expanded.",
+                    "Explanation withheld (no evidence retrieved)." + prov_txt,
                     styles["BodyText"],
                 )
             )
@@ -276,6 +281,21 @@ def generate_pdf_report_bytes(report_obj: dict) -> bytes:
 
     doc.build(story)
     return buffer.getvalue()
+
+
+def run_evidence_builder(max_traits: int | None = None, trait_id: str | None = None):
+    cmd = [sys.executable, "scripts/build_evidence_corpus.py"]
+    if max_traits is not None:
+        cmd.extend(["--max_traits", str(int(max_traits))])
+    if trait_id:
+        cmd.extend(["--trait_id", str(trait_id)])
+    proc = subprocess.run(
+        cmd,
+        cwd=str(BASE_DIR),
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode, (proc.stdout or "").strip(), (proc.stderr or "").strip()
 
 
 def is_dev_mode():
@@ -2344,6 +2364,28 @@ elif page == "Upload & Report":
         )
         include_optional_liver = st.checkbox("Include optional liver traits", value=False)
         red_flag_only = st.checkbox("Show red-flag traits only", value=True)
+        max_refresh_traits = st.number_input(
+            "Evidence refresh batch size",
+            min_value=1,
+            max_value=500,
+            value=80,
+            step=1,
+            help="How many traits to query from Europe PMC in one refresh run.",
+        )
+        refresh_all_evidence = st.button("Build/Refresh Evidence Corpus (Europe PMC)")
+        if refresh_all_evidence:
+            with st.spinner("Building local evidence corpus..."):
+                rc, out, err = run_evidence_builder(max_traits=int(max_refresh_traits))
+            if rc == 0:
+                st.success("Evidence corpus refresh completed.")
+            else:
+                st.warning("Evidence refresh finished with warnings/errors.")
+            with st.expander("Evidence build log"):
+                if out:
+                    st.code(out, language="json")
+                if err:
+                    st.code(err, language="text")
+            st.rerun()
 
         generate = st.button("Run analysis")
 
@@ -2432,6 +2474,7 @@ elif page == "Upload & Report":
                                     life_impact = str(trait.get("explanation", "")).strip()
                                     citations = trait.get("citations", []) if isinstance(trait.get("citations", []), list) else []
                                     evidence_snippets = trait.get("evidence_snippets", []) if isinstance(trait.get("evidence_snippets", []), list) else []
+                                    search_provenance = trait.get("search_provenance", {}) if isinstance(trait.get("search_provenance", {}), dict) else {}
                                     trust = trait.get("trust", {}) if isinstance(trait.get("trust", {}), dict) else {}
 
                                     st.markdown(f"**{trait_name}**")
@@ -2448,14 +2491,18 @@ elif page == "Upload & Report":
                                         )
                                     else:
                                         st.markdown(
-                                            "<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:#a1620733;color:#fde68a;border:1px solid #f59e0b;'>⚠️ Evidence Missing</span>",
+                                            "<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:#a1620733;color:#fde68a;border:1px solid #f59e0b;'>⚠️ Evidence not found (query logged)</span>",
                                             unsafe_allow_html=True,
                                         )
                                     if evidence_status == "found" and life_impact and len(citations) >= 1:
                                         st.write(life_impact)
                                     else:
                                         life_impact = ""
-                                        st.info("Evidence not found in the local corpus yet. This trait will display citations once the study pack is expanded.")
+                                        st.write("Explanation withheld (no evidence retrieved).")
+                                        st.info("No supporting snippets were retrieved from the local evidence corpus yet, so VivaGene will not generate an explanation to avoid unsupported claims.")
+                                        q = str(search_provenance.get("query", "")).strip()
+                                        if q:
+                                            st.caption(f"Search Provenance: `{q}`")
                                     st.caption(f"Evidence level: {evidence_strength or 'Emerging'}")
                                     if trust:
                                         cov = trust.get("coverage", trait.get("coverage", None))
@@ -2498,6 +2545,31 @@ elif page == "Upload & Report":
                                             st.write("No paper retrieved for this trait yet.")
                                         if evidence_snippets and evidence_status == "found":
                                             st.caption(f"Retrieved snippets: {len(evidence_snippets)}")
+                                        elif evidence_status != "found":
+                                            q = str(search_provenance.get("query", "")).strip()
+                                            req = str(search_provenance.get("request_url", "")).strip()
+                                            hits = search_provenance.get("hits", "")
+                                            if q:
+                                                st.caption(f"Latest query: {q}")
+                                            if req:
+                                                st.caption(f"Request URL: {req}")
+                                            if str(hits) != "":
+                                                st.caption(f"Hits: {hits}")
+                                    trait_id_for_fetch = str(trait.get("trait_id", "")).strip()
+                                    if trait_id_for_fetch:
+                                        if st.button("Fetch evidence for this trait", key=f"fetch_{trait_id_for_fetch}"):
+                                            with st.spinner(f"Refreshing evidence for {trait_id_for_fetch}..."):
+                                                rc_t, out_t, err_t = run_evidence_builder(max_traits=1, trait_id=trait_id_for_fetch)
+                                            if rc_t == 0:
+                                                st.success(f"Evidence refresh complete for {trait_id_for_fetch}.")
+                                            else:
+                                                st.warning(f"Evidence refresh finished with warnings for {trait_id_for_fetch}.")
+                                            with st.expander(f"Fetch log: {trait_id_for_fetch}"):
+                                                if out_t:
+                                                    st.code(out_t, language="json")
+                                                if err_t:
+                                                    st.code(err_t, language="text")
+                                            st.rerun()
 
                         # Runtime integrity checks
                         rendered_count = sum(len(v) for v in traits_by_category.values())

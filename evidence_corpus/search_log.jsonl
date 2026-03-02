@@ -1,0 +1,5 @@
+
+{"trait_id": "FIT_VO2MAX", "gene": "PPARGC1A", "rsid": "rs8192678", "query": "(\"PPARGC1A\" AND rs8192678)", "request_url": "", "hits": 0, "retrieved_at": "2026-03-02T12:37:28.334344+00:00", "error": "<urlopen error [Errno 8] nodename nor servname provided, or not known>"}
+{"trait_id": "FIT_VO2MAX", "gene": "PPARGC1A", "rsid": "rs8192678", "query": "(\"PPARGC1A\" AND (\"Aerobic training response tendency\"))", "request_url": "", "hits": 0, "retrieved_at": "2026-03-02T12:37:28.656006+00:00", "error": "<urlopen error [Errno 8] nodename nor servname provided, or not known>"}
+{"trait_id": "FIT_VO2MAX", "gene": "PPARGC1A", "rsid": "rs8192678", "query": "rs8192678", "request_url": "", "hits": 0, "retrieved_at": "2026-03-02T12:37:28.899688+00:00", "error": "<urlopen error [Errno 8] nodename nor servname provided, or not known>"}
+{"trait_id": "FIT_VO2MAX", "gene": "PPARGC1A", "rsid": "rs8192678", "query": "\"PPARGC1A\"", "request_url": "", "hits": 0, "retrieved_at": "2026-03-02T12:37:29.173134+00:00", "error": "<urlopen error [Errno 8] nodename nor servname provided, or not known>"}

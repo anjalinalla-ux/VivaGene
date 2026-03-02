@@ -1,11 +1,14 @@
 import csv
 import json
 import os
+import re
+from datetime import datetime, timezone
+from pathlib import Path
 from openai import OpenAI
 from utils.trait_quality import compute_trait_completeness, trait_has_variants
 from study_pack_loader import load_all_trait_packs, index_packs_by_id
 from genomics_polygenic import normalize_genotype as poly_normalize_genotype, compute_prs_for_trait
-from rag_retriever import load_corpus, retrieve_evidence as retrieve_local_evidence, evidence_quality
+from rag_retriever import evidence_quality
 from rag_generator import generate_trait_explanation_rag
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -106,6 +109,10 @@ TRAIT_DB_JSON_PATH = "trait_database_model.json"
 GENOTYPE_FILE_PATH = "John_doe_genotype.txt"
 LAST_MATCH_WARNINGS = []
 LAST_DB_WARNINGS = []
+EVIDENCE_DIR = Path("evidence_corpus")
+EVIDENCE_INDEX_PATH = EVIDENCE_DIR / "index.jsonl"
+EVIDENCE_SEARCH_LOG_PATH = EVIDENCE_DIR / "search_log.jsonl"
+_EVIDENCE_CACHE = {"sig": "", "rows": []}
 
 TRACK_SUBCATEGORY_MAP = {
     "Nutrition": ("Nutrition", "General"),
@@ -430,12 +437,140 @@ def _summarize_prs_trait(prs_obj):
         "confidence": confidence,
         "evidence_status": prs_obj.get("evidence_status", "missing"),
         "evidence_snippets": prs_obj.get("evidence_snippets", []),
+        "search_provenance": prs_obj.get("search_provenance", {}),
         "citations": prs_obj.get("citations", []),
         "warnings": prs_obj.get("warnings", []),
         "trust": prs_obj.get("trust", {}),
         "priority": priority,
         "flag_level": flag_level,
     }
+
+
+def _safe_jsonl_read(path: Path):
+    if not path.exists():
+        return []
+    rows = []
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(obj, dict):
+                    rows.append(obj)
+    except Exception:
+        return []
+    return rows
+
+
+def load_local_corpus(index_path: Path = EVIDENCE_INDEX_PATH):
+    path = Path(index_path)
+    sig = ""
+    try:
+        if path.exists():
+            st = path.stat()
+            sig = f"{path.resolve()}:{st.st_mtime_ns}:{st.st_size}"
+        else:
+            sig = f"{path.resolve()}:missing"
+    except Exception:
+        sig = str(path)
+    if _EVIDENCE_CACHE.get("sig") == sig:
+        return _EVIDENCE_CACHE.get("rows", [])
+    rows = _safe_jsonl_read(path)
+    _EVIDENCE_CACHE["sig"] = sig
+    _EVIDENCE_CACHE["rows"] = rows
+    return rows
+
+
+def _latest_search_provenance(trait_id: str, gene: str, rsid: str, log_path: Path = EVIDENCE_SEARCH_LOG_PATH):
+    rows = _safe_jsonl_read(log_path)
+    tid = str(trait_id or "").strip()
+    g = str(gene or "").strip().upper()
+    r = str(rsid or "").strip().lower()
+    for row in reversed(rows):
+        if not isinstance(row, dict):
+            continue
+        if tid and str(row.get("trait_id", "")).strip() == tid:
+            return row
+        if g and str(row.get("gene", "")).strip().upper() == g:
+            return row
+        if r and str(row.get("rsid", "")).strip().lower() == r:
+            return row
+    return {}
+
+
+def retrieve_evidence(trait: dict, k: int = 3):
+    rows = load_local_corpus(EVIDENCE_INDEX_PATH)
+    if not isinstance(rows, list) or not rows:
+        return []
+
+    t = trait if isinstance(trait, dict) else {}
+    trait_id = str(t.get("trait_id", "")).strip()
+    gene = str(t.get("gene", "")).strip().upper()
+    rsid = str(t.get("rsid", "")).strip().lower()
+    trait_name = str(t.get("trait_name", "")).strip().lower()
+    category = str(t.get("category", "")).strip().lower()
+    query_terms = set(
+        x
+        for x in re.split(r"[^a-z0-9]+", f"{trait_name} {category}")
+        if len(x) >= 3
+    )
+
+    primary = []
+    fallback = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        rid = str(row.get("trait_id", "")).strip()
+        rg = str(row.get("gene", "")).strip().upper()
+        rr = str(row.get("rsid", "")).strip().lower()
+        if trait_id and rid == trait_id:
+            primary.append(row)
+            continue
+        if (gene and rg == gene) or (rsid and rr == rsid):
+            fallback.append(row)
+
+    candidates = primary if primary else fallback if fallback else rows
+
+    ranked = []
+    for row in candidates:
+        score = 0.0
+        if trait_id and str(row.get("trait_id", "")).strip() == trait_id:
+            score += 4.0
+        if gene and str(row.get("gene", "")).strip().upper() == gene:
+            score += 2.0
+        if rsid and str(row.get("rsid", "")).strip().lower() == rsid:
+            score += 2.0
+        blob = (
+            f"{str(row.get('title', '')).lower()} "
+            f"{str(row.get('snippet', row.get('snippet_text', ''))).lower()}"
+        )
+        overlap = sum(1 for q in query_terms if q and q in blob)
+        score += min(1.5, overlap * 0.2)
+        ranked.append((score, row))
+
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    out = []
+    seen = set()
+    for _, row in ranked:
+        ident = (
+            str(row.get("pmid", "")).strip()
+            or str(row.get("pmcid", "")).strip()
+            or str(row.get("doi", "")).strip()
+            or str(row.get("title", "")).strip()
+        )
+        key = f"{trait_id}|{ident}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+        if len(out) >= max(1, int(k or 3)):
+            break
+    return out
 
 
 def _build_retrieval_query(prs_obj: dict, trait_pack: dict) -> str:
@@ -469,7 +604,10 @@ def _build_citation_objects(snippets, max_items: int = 3):
     for sn in snippets if isinstance(snippets, list) else []:
         if not isinstance(sn, dict):
             continue
-        cid = str(sn.get("citation_id", "")).strip()
+        pmid = str(sn.get("pmid", "")).strip()
+        pmcid = str(sn.get("pmcid", "")).strip()
+        doi = str(sn.get("doi", "")).strip()
+        cid = pmid or pmcid or doi or str(sn.get("citation_id", "")).strip()
         if not cid or cid in seen:
             continue
         seen.add(cid)
@@ -478,7 +616,10 @@ def _build_citation_objects(snippets, max_items: int = 3):
                 "label": len(out) + 1,
                 "title": str(sn.get("title", "")).strip() or "Untitled",
                 "year": str(sn.get("year", "")).strip(),
-                "identifier": cid,
+                "identifier": f"PMID:{pmid}" if pmid else (f"PMCID:{pmcid}" if pmcid else (f"DOI:{doi}" if doi else cid)),
+                "pmid": pmid,
+                "pmcid": pmcid,
+                "doi": doi,
                 "source_url": str(sn.get("url", "")).strip(),
             }
         )
@@ -547,7 +688,7 @@ def build_prs_report_from_upload(genotype_path: str, categories_selected: list[s
 
     display_results = [r for r in prs_results if isinstance(r, dict)]
     fallback_note = ""
-    corpus = load_corpus("evidence_corpus")
+    corpus = load_local_corpus(EVIDENCE_INDEX_PATH)
     traits_refused = 0
     traits_with_evidence = 0
     traits_missing_evidence = 0
@@ -562,6 +703,7 @@ def build_prs_report_from_upload(genotype_path: str, categories_selected: list[s
         r["evidence_snippets"] = []
         r["citations"] = []
         r["explanation"] = ""
+        r["search_provenance"] = {}
 
         if not trait_pack:
             r.setdefault("warnings", []).append("Insufficient evidence in local corpus")
@@ -575,6 +717,12 @@ def build_prs_report_from_upload(genotype_path: str, categories_selected: list[s
             }
             traits_refused += 1
             traits_missing_evidence += 1
+            r["search_provenance"] = _latest_search_provenance(
+                trait_id=trait_id,
+                gene=str(r.get("gene", "")).strip(),
+                rsid=str(r.get("rsid", "")).strip(),
+                log_path=EVIDENCE_SEARCH_LOG_PATH,
+            )
             continue
 
         if (not trait_pack.get("variants")) or completeness_status == "ComingSoon":
@@ -589,15 +737,46 @@ def build_prs_report_from_upload(genotype_path: str, categories_selected: list[s
             }
             traits_refused += 1
             traits_missing_evidence += 1
+            r["search_provenance"] = _latest_search_provenance(
+                trait_id=trait_id,
+                gene=str(r.get("gene", "")).strip(),
+                rsid=str(r.get("rsid", "")).strip(),
+                log_path=EVIDENCE_SEARCH_LOG_PATH,
+            )
             continue
 
         query = _build_retrieval_query(r, trait_pack)
-        snippets = retrieve_local_evidence(query=query, trait_pack=trait_pack, k=12)
+        gene_for_query = ""
+        rsid_for_query = ""
+        for v in trait_pack.get("variants", []) if isinstance(trait_pack.get("variants", []), list) else []:
+            if not isinstance(v, dict):
+                continue
+            if not gene_for_query:
+                gene_for_query = str(v.get("gene", "")).strip()
+            if not rsid_for_query:
+                rsid_for_query = str(v.get("rsid", "")).strip()
+        snippets = retrieve_evidence(
+            {
+                "trait_id": trait_id,
+                "trait_name": r.get("trait_name", ""),
+                "category": r.get("category", ""),
+                "gene": gene_for_query or r.get("gene", ""),
+                "rsid": rsid_for_query or r.get("rsid", ""),
+                "query": query,
+            },
+            k=3,
+        )
         quality = evidence_quality(snippets)
+        r["search_provenance"] = _latest_search_provenance(
+            trait_id=trait_id,
+            gene=gene_for_query or str(r.get("gene", "")).strip(),
+            rsid=rsid_for_query or str(r.get("rsid", "")).strip(),
+            log_path=EVIDENCE_SEARCH_LOG_PATH,
+        )
         if quality.get("quality") in {"High", "Medium"} and snippets:
             traits_with_evidence += 1
             r["evidence_status"] = "found"
-            r["evidence_snippets"] = [s for s in snippets if isinstance(s, dict)][:12]
+            r["evidence_snippets"] = [s for s in snippets if isinstance(s, dict)][:3]
             citations = _build_citation_objects(snippets, max_items=3)
             gen = generate_trait_explanation_rag(r, snippets, quality)
 
