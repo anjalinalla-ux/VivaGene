@@ -1,0 +1,79 @@
+{
+  "trait_id": "FIT_RECOVERY",
+  "queries": [
+    "AMPD1 rs17602729 High-intensity fatigue tendency",
+    "AMPD1 polymorphism lipid",
+    "rs17602729 association lipid"
+  ],
+  "citations": [
+    {
+      "pmid": "40332645",
+      "pmcid": "PMC12152022",
+      "doi": "10.1007/s40279-025-02202-9",
+      "title": "Association Between the c.34C &gt; T (rs17602729) Polymorphism of the AMPD1 Gene and the Status of Endurance and Power Athletes: A Systematic Review and Meta-Analysis.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/40332645"
+    },
+    {
+      "pmid": "40642296",
+      "pmcid": "PMC12240954",
+      "doi": "10.3389/fphys.2025.1568334",
+      "title": "Importance of selected genetic determinants on endurance performance and physical strength: a narrative review.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/40642296"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "<h4>Background</h4>Previous research has shown that variants in the AMPD1 gene, which encodes the adenosine monophosphate deaminase 1 (AMPD1) protein, may affect energy supply of the muscle and fatigue resistance during high-intensity exercise.",
+      "citation": {
+        "pmid": "40332645",
+        "pmcid": "PMC12152022",
+        "doi": "10.1007/s40279-025-02202-9",
+        "title": "Association Between the c.34C &gt; T (rs17602729) Polymorphism of the AMPD1 Gene and the Status of Endurance and Power Athletes: A Systematic Review and Meta-Analysis.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40332645"
+      }
+    },
+    {
+      "text": "A single nucleotide substitution in this gene, specifically a cytosine-to-thymine substitution (c.34C > T; rs17602729), results in a nonsense mutation that causes a deficiency in the AMPD1 protein.",
+      "citation": {
+        "pmid": "40332645",
+        "pmcid": "PMC12152022",
+        "doi": "10.1007/s40279-025-02202-9",
+        "title": "Association Between the c.34C &gt; T (rs17602729) Polymorphism of the AMPD1 Gene and the Status of Endurance and Power Athletes: A Systematic Review and Meta-Analysis.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40332645"
+      }
+    },
+    {
+      "text": "Physical strength and endurance of an individual are vital for athletic performance, and minimizing the risk of injuries, especially during competitions.",
+      "citation": {
+        "pmid": "40642296",
+        "pmcid": "PMC12240954",
+        "doi": "10.3389/fphys.2025.1568334",
+        "title": "Importance of selected genetic determinants on endurance performance and physical strength: a narrative review.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40642296"
+      }
+    },
+    {
+      "text": "Other than training and diet, athletic performance is determined by genetic factors or heredity, which is less focused in sports science research.",
+      "citation": {
+        "pmid": "40642296",
+        "pmcid": "PMC12240954",
+        "doi": "10.3389/fphys.2025.1568334",
+        "title": "Importance of selected genetic determinants on endurance performance and physical strength: a narrative review.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40642296"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:29.675833+00:00"
+}

@@ -1,0 +1,38 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VivaGene logo">
+  <defs>
+    <linearGradient id="vgGradA" x1="10" y1="8" x2="55" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="0.5" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <linearGradient id="vgGradB" x1="54" y1="8" x2="10" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#93C5FD"/>
+      <stop offset="0.55" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <filter id="vgGlow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g id="vg-outline" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 10L25 54H30L45 10" stroke="url(#vgGradA)" stroke-width="3.6"/>
+    <path d="M54 21C54 12.5 47.2 8 39 8C30 8 24.5 13.8 24.5 22C24.5 30.2 30.5 35.2 38.8 35.2H48.8" stroke="url(#vgGradB)" stroke-width="3.1"/>
+  </g>
+
+  <g id="dna-spin" class="dna-spin" filter="url(#vgGlow)">
+    <path d="M27 17C37 22 37 29 27 34C17 39 17 46 27 51" stroke="url(#vgGradA)" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+    <path d="M39 17C29 22 29 29 39 34C49 39 49 46 39 51" stroke="url(#vgGradB)" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+    <line x1="28" y1="22" x2="38" y2="24" stroke="#BFE6FF" stroke-width="1.35" stroke-linecap="round"/>
+    <line x1="27.6" y1="28" x2="38.4" y2="29" stroke="#C9E7FF" stroke-width="1.35" stroke-linecap="round"/>
+    <line x1="27.2" y1="34" x2="38.8" y2="34" stroke="#D5EBFF" stroke-width="1.35" stroke-linecap="round"/>
+    <line x1="27.6" y1="40" x2="38.4" y2="39" stroke="#C9E7FF" stroke-width="1.35" stroke-linecap="round"/>
+    <line x1="28" y1="46" x2="38" y2="44" stroke="#BFE6FF" stroke-width="1.35" stroke-linecap="round"/>
+    <circle cx="22" cy="18" r="1.2" fill="#60A5FA" opacity="0.9"/>
+    <circle cx="44" cy="26" r="1.1" fill="#A78BFA" opacity="0.85"/>
+  </g>
+</svg>

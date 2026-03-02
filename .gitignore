@@ -1,0 +1,27 @@
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Python cache/build
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Local uploads / generated artifacts
+uploaded_genome.txt
+GenAI_Engine_Report.pdf
+VivaGene_Report.pdf
+trait_database_model.json
+
+# Local evidence cache / corpora outputs
+validation_outputs/
+evidence_cache/
+corpora/
+europe_pmc_cache/
+
+# Optional local virtual environments
+.venv/
+venv/

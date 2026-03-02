@@ -1,0 +1,79 @@
+{
+  "trait_id": "FIT_VO2MAX",
+  "queries": [
+    "PPARGC1A rs8192678 Aerobic training response tendency",
+    "PPARGC1A polymorphism VO2",
+    "rs8192678 association VO2"
+  ],
+  "citations": [
+    {
+      "pmid": "39766897",
+      "pmcid": "PMC11675316",
+      "doi": "10.3390/genes15121631",
+      "title": "Role of the <i>PPARGC1A</i> Gene and Its rs8192678 Polymorphism on Sport Performance, Aerobic Capacity, Muscle Adaptation and Metabolic Diseases: A Narrative Review.",
+      "year": "2024",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/39766897"
+    },
+    {
+      "pmid": "40642296",
+      "pmcid": "PMC12240954",
+      "doi": "10.3389/fphys.2025.1568334",
+      "title": "Importance of selected genetic determinants on endurance performance and physical strength: a narrative review.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/40642296"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "<h4>Background/objectives</h4>The <i>PPARGC1A</i> gene, encoding the PGC-1α protein, is a critical regulator of energy metabolism, influencing mitochondrial biogenesis, fatty acid oxidation, and carbohydrate metabolism.",
+      "citation": {
+        "pmid": "39766897",
+        "pmcid": "PMC11675316",
+        "doi": "10.3390/genes15121631",
+        "title": "Role of the <i>PPARGC1A</i> Gene and Its rs8192678 Polymorphism on Sport Performance, Aerobic Capacity, Muscle Adaptation and Metabolic Diseases: A Narrative Review.",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/39766897"
+      }
+    },
+    {
+      "text": "This narrative review aims to evaluate the role of the <i>PPARGC1A</i> gene, with a specific focus on the c.1444G<A polymorphism (rs8192678), in sports performance, including its impact on aerobic capacity, muscle adaptation, and its potential implications for metabolic health.<h4>Methods</h4>A comprehensive literature search was conducted using databases such as PubMed, Scopus, Science Direct, and Web of Science, following PRISMA guidelines.",
+      "citation": {
+        "pmid": "39766897",
+        "pmcid": "PMC11675316",
+        "doi": "10.3390/genes15121631",
+        "title": "Role of the <i>PPARGC1A</i> Gene and Its rs8192678 Polymorphism on Sport Performance, Aerobic Capacity, Muscle Adaptation and Metabolic Diseases: A Narrative Review.",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/39766897"
+      }
+    },
+    {
+      "text": "Physical strength and endurance of an individual are vital for athletic performance, and minimizing the risk of injuries, especially during competitions.",
+      "citation": {
+        "pmid": "40642296",
+        "pmcid": "PMC12240954",
+        "doi": "10.3389/fphys.2025.1568334",
+        "title": "Importance of selected genetic determinants on endurance performance and physical strength: a narrative review.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40642296"
+      }
+    },
+    {
+      "text": "Other than training and diet, athletic performance is determined by genetic factors or heredity, which is less focused in sports science research.",
+      "citation": {
+        "pmid": "40642296",
+        "pmcid": "PMC12240954",
+        "doi": "10.3389/fphys.2025.1568334",
+        "title": "Importance of selected genetic determinants on endurance performance and physical strength: a narrative review.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40642296"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:32.382221+00:00"
+}

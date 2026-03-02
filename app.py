@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import csv
 import json
 import re
@@ -7,6 +6,7 @@ import subprocess
 import sys
 import textwrap
 import traceback
+import base64
 from io import BytesIO
 from pathlib import Path
 from reportlab.lib import colors
@@ -38,6 +38,15 @@ BASE_DIR = Path(__file__).resolve().parent
 STUDY_PACK_DIR = BASE_DIR / "trait_study_packs"
 ASSETS_DIR = BASE_DIR / "assets"
 VIVAGENE_LOGO_PATH = ASSETS_DIR / "vivagene_logo.svg"
+VIVAGENE_MARK_PATH = ASSETS_DIR / "vivagene_mark.png"
+
+
+def get_secret(name: str, default: str = "") -> str:
+    try:
+        value = st.secrets.get(name, os.getenv(name, default))
+    except Exception:
+        value = os.getenv(name, default)
+    return str(value or "").strip()
 
 
 def sanitize_svg(svg: str) -> str:
@@ -82,11 +91,18 @@ def end_page_wrap():
 
 
 def render_vg_helix_svg() -> str:
-    return (
-        '<div class="vg-mark-wrap" aria-hidden="true">'
-        '<img src="vivagene_helix.png" alt="VivaGene Helix Mark"/>'
-        '</div>'
-    )
+    if not VIVAGENE_MARK_PATH.exists():
+        return "<div class='vg-mark-wrap'><div class='trait-muted'>VivaGene Helix Mark (missing asset)</div></div>"
+    try:
+        encoded = base64.b64encode(VIVAGENE_MARK_PATH.read_bytes()).decode("utf-8")
+        uri = f"data:image/png;base64,{encoded}"
+        return (
+            '<div class="vg-mark-wrap mark-card" aria-hidden="true">'
+            f'<img src="{uri}" alt="VivaGene Helix Mark"/>'
+            "</div>"
+        )
+    except Exception:
+        return "<div class='vg-mark-wrap'><div class='trait-muted'>VivaGene Helix Mark (missing asset)</div></div>"
 
 def normalize_report(report_obj):
     """Ensure downstream renderers receive a dict with .get().
@@ -357,6 +373,74 @@ def build_tab_panel_html(traits: list[dict], mode_label: str) -> str:
         </div>
         """
     ).strip()
+
+
+def render_trait_card(trait: dict, mode_label: str):
+    t = trait if isinstance(trait, dict) else {}
+    name = _html_escape(t.get("trait_name", "Trait"))
+    gene = _html_escape(t.get("gene", ""))
+    rsid = _html_escape(t.get("rsid", ""))
+    gt = _html_escape(t.get("user_genotype", ""))
+    evidence = _html_escape(t.get("evidence_strength", ""))
+    signal = _html_escape(
+        str(t.get("signal_bucket", "")).strip()
+        or str(t.get("effect_level", "")).strip()
+        or str(t.get("effect_label", "")).strip()
+    )
+    coverage = t.get("coverage", "")
+    if isinstance(coverage, (int, float)):
+        coverage_txt = f"{float(coverage) * 100:.0f}%"
+    else:
+        coverage_txt = _html_escape(str(coverage or ""))
+
+    is_patient = str(mode_label).strip().lower().startswith("patient")
+    explanation = (
+        t.get("explanation_patient")
+        if is_patient
+        else t.get("explanation_doctor")
+    )
+    if not explanation:
+        explanation = (
+            f"{str(t.get('_final_summary', '')).strip()} {str(t.get('_final_life_impact', '')).strip()}"
+        ).strip()
+    explanation = str(explanation or "").replace("<b>", "").replace("</b>", "")
+    explanation = re.sub(r"<[^>]+>", " ", explanation)
+    explanation = _html_escape(" ".join(explanation.split()))
+
+    sources = t.get("_final_citations", t.get("citations", []))
+    if not isinstance(sources, list):
+        sources = []
+
+    html = f"""
+    <div class="trait-card">
+      <div class="trait-title">{name}
+        {f'<span class="chip">{signal}</span>' if signal else ''}
+      </div>
+      <div class="trait-meta">
+        Gene: <b>{gene}</b> · rsID: <b>{rsid}</b> · Genotype: <b>{gt}</b><br/>
+        {f'Coverage: <b>{coverage_txt}</b> · ' if coverage_txt else ''}Evidence: <b>{evidence or 'Unknown'}</b>
+      </div>
+      <div class="trait-body">{explanation or 'Evidence pending — no explanatory claims shown yet (RAG safety).'}</div>
+    """
+    if sources:
+        html += "<div class='trait-sources'><b>Sources</b><ul>"
+        for s in sources[:3]:
+            if isinstance(s, dict):
+                title = _html_escape(s.get("title", "Study"))
+                url = _html_escape(s.get("url", s.get("source_url", "")))
+                pmid = _html_escape(s.get("pmid", ""))
+                label = f"{title} (PMID: {pmid})" if pmid else title
+                if url:
+                    html += f"<li><a href='{url}' target='_blank'>{label}</a></li>"
+                else:
+                    html += f"<li>{label}</li>"
+            else:
+                html += f"<li>{_html_escape(str(s))}</li>"
+        html += "</ul></div>"
+    else:
+        html += "<div class='trait-sources trait-muted'>No citations available yet for this trait.</div>"
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def compute_category_overlap(parsed_rsids: set[str], include_liver: bool) -> dict:
@@ -680,9 +764,9 @@ def attach_polygenic_evidence_scaffold(report: dict, user_variants: list[dict]):
     }
     return rep, ""
 
-# Expect the key to be set as OPENROUTER_API_KEY
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = "mistralai/mistral-7b-instruct"
+# Prefer Streamlit secrets in Cloud, fallback to environment variables locally.
+OPENROUTER_API_KEY = get_secret("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = get_secret("OPENROUTER_MODEL", "mistralai/mistral-7b-instruct")
 OPENROUTER_CLIENT = (
     OpenAI(api_key=OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1")
     if (OpenAI is not None and OPENROUTER_API_KEY)
@@ -1254,6 +1338,12 @@ st.markdown(
         width: 100%;
         display: block;
     }
+    .mark-card img {
+        display: block;
+        margin-top: 10px;
+        border-radius: 12px;
+        max-width: 100%;
+    }
 
     .section-title {
         font-size: 24px;
@@ -1440,110 +1530,79 @@ st.markdown(
         font-size: 13px;
         color: var(--color-text-secondary);
     }
+    /* White results panel for trait output */
     .results-panel {
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-        overflow: hidden;
-        margin-bottom: var(--spacing-md);
+      background: #ffffff;
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      border-radius: 18px;
+      padding: 18px 18px 14px;
+      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+      max-width: 1100px;
+      margin-bottom: var(--spacing-md);
     }
-    .results-panel-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px 14px;
-        border-bottom: 1px solid #e5e7eb;
-        background: #ffffff;
-        color: #111827;
-        font-weight: 600;
+
+    /* Scroll area INSIDE the panel */
+    .results-scroll {
+      max-height: 620px;
+      overflow-y: auto;
+      padding-right: 10px;
+      padding-bottom: 6px;
     }
-    .results-count {
-        min-width: 26px;
-        text-align: center;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
-        color: #374151;
-        font-size: 12px;
+
+    /* Nice scrollbar */
+    .results-scroll::-webkit-scrollbar { width: 10px; }
+    .results-scroll::-webkit-scrollbar-thumb {
+      background: rgba(15,23,42,0.18);
+      border-radius: 999px;
     }
-    .results-panel-body {
-        height: 420px;
-        overflow-y: auto;
-        padding: 10px;
-        background: #ffffff;
+    .results-scroll::-webkit-scrollbar-track {
+      background: rgba(15,23,42,0.06);
+      border-radius: 999px;
     }
-    .trait-mini-card {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 10px 12px;
-        margin-bottom: 10px;
-        color: #111827;
+
+    /* Force readable text inside the white panel */
+    .results-panel, .results-panel * {
+      color: #111827 !important;
+    }
+
+    /* Links inside panel */
+    .results-panel a {
+      color: #2563eb !important;
+      text-decoration: none;
+    }
+    .results-panel a:hover {
+      text-decoration: underline;
+    }
+
+    /* Trait card inside panel */
+    .trait-card {
+      background: #ffffff;
+      border: 1px solid rgba(15,23,42,0.10);
+      border-radius: 14px;
+      padding: 14px 14px 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 6px 16px rgba(15,23,42,0.08);
     }
     .trait-card, .trait-card * { color: #111827 !important; }
+    .trait-title { font-weight: 700; font-size: 1.02rem; margin-bottom: 4px; }
+    .trait-meta { color: #6b7280 !important; font-size: 0.86rem; margin-bottom: 8px; }
+    .trait-body { font-size: 0.94rem; line-height: 1.45; margin-top: 6px; }
+    .trait-sources { margin-top: 10px; font-size: 0.90rem; }
+    .trait-sources ul { margin: 6px 0 0 18px; }
+    .trait-sources li { margin: 4px 0; }
     .trait-muted { color: #6b7280 !important; }
-    .trait-mini-title {
-        font-size: 15px;
-        line-height: 1.4;
-        font-weight: 600;
-        margin-bottom: 4px;
-        color: #111827;
-    }
-    .trait-mini-meta {
-        font-size: 13px;
-        line-height: 1.5;
-        color: #4b5563;
-        margin-bottom: 2px;
-    }
-    .trait-mini-expl {
-        font-size: 13px;
-        line-height: 1.5;
-        color: #1f2937;
-        margin: 6px 0 8px;
-    }
-    .trait-mini-cite-label {
-        font-size: 12px;
-        color: #6b7280;
-        margin-bottom: 4px;
-    }
-    .trait-citations {
-        margin: 0;
-        padding-left: 16px;
-    }
-    .trait-citations li {
-        margin: 0 0 3px;
-        font-size: 12px;
-    }
-    .trait-citations a {
-        color: #1d4ed8;
-        text-decoration: underline;
-    }
-    .trait-citations-empty {
-        font-size: 12px;
-        color: #6b7280;
-    }
-    .single-results-panel {
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-        overflow: hidden;
-    }
-    .single-results-head {
-        padding: 10px 14px;
-        border-bottom: 1px solid #e5e7eb;
-        color: #374151;
-        background: #ffffff;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .single-results-body {
-        height: 520px;
-        overflow-y: auto;
-        padding: 10px;
-        background: #ffffff;
+
+    /* Small “chip” label */
+    .chip {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: 1px solid rgba(15,23,42,0.12);
+      background: rgba(37,99,235,0.08);
+      color: #1d4ed8 !important;
+      margin-left: 8px;
     }
     .trait-missing {
         font-size: 12px;
@@ -2290,7 +2349,6 @@ elif page == "Upload & Report":
                         st.markdown("### Evidence-based overview")
                         st.caption("This overview is educational. It does not diagnose disease or replace medical care.")
 
-                        st.markdown("### Trait cards")
                         grouped = {"Neurobehavior": [], "Nutrition": [], "Fitness": [], "Liver": []}
                         mode_now = st.session_state.get("explain_mode", "Patient (simple)")
                         show_only_found_now = bool(st.session_state.get("show_only_found", True))
@@ -2355,21 +2413,28 @@ elif page == "Upload & Report":
                             trait["_normalized_category"] = norm_cat
                             grouped.setdefault(norm_cat, []).append(trait)
 
-                        tab_labels = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver (optional)"] if include_optional_liver else [])
-                        tabs = st.tabs(tab_labels)
-                        tab_to_cat = [("Neurobehavior", tabs[0]), ("Nutrition", tabs[1]), ("Fitness", tabs[2])]
-                        if include_optional_liver:
-                            tab_to_cat.append(("Liver", tabs[3]))
-
                         with st.container():
-                            st.markdown("#### Trait highlights (educational)")
+                            st.markdown("<div class='results-panel'>", unsafe_allow_html=True)
+                            st.markdown("<div class='section-title'>Trait cards</div>", unsafe_allow_html=True)
+                            tab_labels = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver (optional)"] if include_optional_liver else [])
+                            tabs = st.tabs(tab_labels)
+                            tab_to_cat = [("Neurobehavior", tabs[0]), ("Nutrition", tabs[1]), ("Fitness", tabs[2])]
+                            if include_optional_liver:
+                                tab_to_cat.append(("Liver", tabs[3]))
                             for cat_name, tab in tab_to_cat:
                                 with tab:
-                                    panel_html = build_tab_panel_html(grouped.get(cat_name, []), mode_now)
-                                    if "<div class=" in panel_html:
-                                        components.html(panel_html, height=560, scrolling=True)
+                                    st.markdown("<div class='results-scroll'>", unsafe_allow_html=True)
+                                    cat_traits = grouped.get(cat_name, [])
+                                    if not cat_traits:
+                                        st.markdown(
+                                            "<div class='trait-muted'>No matching variants from your file for this category yet.</div>",
+                                            unsafe_allow_html=True,
+                                        )
                                     else:
-                                        st.markdown(panel_html, unsafe_allow_html=True)
+                                        for trait in cat_traits:
+                                            render_trait_card(trait, "patient" if "Patient" in mode_now else "doctor")
+                                    st.markdown("</div>", unsafe_allow_html=True)
+                            st.markdown("</div>", unsafe_allow_html=True)
 
                         # Runtime integrity checks
                         rendered_count = sum(len(v) for v in grouped.values())

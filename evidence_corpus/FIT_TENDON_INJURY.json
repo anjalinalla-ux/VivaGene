@@ -1,0 +1,79 @@
+{
+  "trait_id": "FIT_TENDON_INJURY",
+  "queries": [
+    "COL5A1 rs12722 Tendon and ligament property tendency",
+    "COL5A1 polymorphism VO2",
+    "rs12722 association VO2"
+  ],
+  "citations": [
+    {
+      "pmid": "39594578",
+      "pmcid": "PMC11593177",
+      "doi": "10.3390/cells13221828",
+      "title": "The Genetic Basis of Non-Contact Soft Tissue Injuries-Are There Practical Applications of Genetic Knowledge?",
+      "year": "2024",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/39594578"
+    },
+    {
+      "pmid": "29860681",
+      "pmcid": "PMC6060780",
+      "doi": "10.1007/s00421-018-3905-0",
+      "title": "Patellar tendon properties distinguish elite from non-elite soccer players and are related to peak horizontal but not vertical power.",
+      "year": "2018",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/29860681"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "Physical activity increases the risk of non-contact injuries, mainly affecting muscles, tendons, and ligaments.",
+      "citation": {
+        "pmid": "39594578",
+        "pmcid": "PMC11593177",
+        "doi": "10.3390/cells13221828",
+        "title": "The Genetic Basis of Non-Contact Soft Tissue Injuries-Are There Practical Applications of Genetic Knowledge?",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/39594578"
+      }
+    },
+    {
+      "text": "Genetic factors are recognized as contributing to susceptibility to different types of soft tissue injuries, making this broad condition a complicated multifactorial entity.",
+      "citation": {
+        "pmid": "39594578",
+        "pmcid": "PMC11593177",
+        "doi": "10.3390/cells13221828",
+        "title": "The Genetic Basis of Non-Contact Soft Tissue Injuries-Are There Practical Applications of Genetic Knowledge?",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/39594578"
+      }
+    },
+    {
+      "text": "<h4>Purpose</h4>To investigate potential differences in patellar tendon properties between elite and non-elite soccer players, and to establish whether tendon properties were related to power assessed during unilateral jumps performed in different directions.<h4>Methods</h4>Elite (n = 16; age 18.1 ± 1.0 years) and non-elite (n = 13; age 22.3 ± 2.7 years) soccer players performed vertical, horizontal-forward and medial unilateral countermovement jumps (CMJs) on a force plate.",
+      "citation": {
+        "pmid": "29860681",
+        "pmcid": "PMC6060780",
+        "doi": "10.1007/s00421-018-3905-0",
+        "title": "Patellar tendon properties distinguish elite from non-elite soccer players and are related to peak horizontal but not vertical power.",
+        "year": "2018",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/29860681"
+      }
+    },
+    {
+      "text": "Patellar tendon (PT) cross-sectional area, elongation, strain, stiffness, and Young's modulus (measured at the highest common force interval) were assessed with ultrasonography and isokinetic dynamometry.<h4>Results</h4>Elite demonstrated greater PT elongation (6.83 ± 1.87 vs.",
+      "citation": {
+        "pmid": "29860681",
+        "pmcid": "PMC6060780",
+        "doi": "10.1007/s00421-018-3905-0",
+        "title": "Patellar tendon properties distinguish elite from non-elite soccer players and are related to peak horizontal but not vertical power.",
+        "year": "2018",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/29860681"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:33.051114+00:00"
+}

@@ -1,0 +1,1491 @@
+Appearance:
+- id: uv_sensitivity_tendency
+  title: UV sensitivity tendency
+  snps:
+  - rs1426654
+  - rs6058017
+  - rs12203592
+  - rs1805007
+  - rs16891982
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: skin_oxidative_stress_response_tendency
+  title: Skin oxidative stress response tendency
+  snps:
+  - rs1426654
+  - rs6058017
+  - rs12203592
+  - rs1805007
+  - rs16891982
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: skin_inflammation_response_to_environmental_irrita
+  title: Skin inflammation response to environmental irritants
+  snps:
+  - rs1426654
+  - rs6058017
+  - rs12203592
+  - rs1805007
+  - rs16891982
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sensitivity_to_fragrance_irritants_in_personal_car
+  title: Sensitivity to fragrance/irritants in personal-care products
+  snps:
+  - rs1426654
+  - rs6058017
+  - rs12203592
+  - rs1805007
+  - rs16891982
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+Fitness:
+- id: power_vs_endurance_tendency
+  title: Power vs endurance tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: muscle_fiber_composition_tendency
+  title: Muscle fiber composition tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: training_adaptation_speed
+  title: Training adaptation speed
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: recovery_speed_after_exercise
+  title: Recovery speed after exercise
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: overtraining_sensitivity_tendency
+  title: Overtraining sensitivity tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: heat_tolerance_during_exercise
+  title: Heat tolerance during exercise
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: aerobic_capacity_response_to_training
+  title: Aerobic capacity response to training
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: lactate_clearance_tendency
+  title: Lactate clearance tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: strength_gain_responsiveness
+  title: Strength gain responsiveness
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: flexibility_tendency
+  title: Flexibility tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: injury_susceptibility_during_high_impact
+  title: Injury susceptibility during high impact
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: hydration_efficiency_during_workouts
+  title: Hydration efficiency during workouts
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: fat_oxidation_during_exercise_tendency
+  title: Fat oxidation during exercise tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: exercise_adherence_tendency
+  title: Exercise adherence tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: reaction_time_tendency
+  title: Reaction time tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: balance_and_coordination_tendency
+  title: Balance and coordination tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: explosive_power_potential
+  title: Explosive power potential
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: endurance_potential_tendency
+  title: Endurance potential tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: recovery_day_requirement_tendency
+  title: Recovery day requirement tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: thermoregulation_efficiency_tendency
+  title: Thermoregulation efficiency tendency
+  snps:
+  - rs1815739
+  - rs2104772
+  - rs1800012
+  - rs12722
+  - rs4253778
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+Neurobehavior:
+- id: stress_reactivity_tendency
+  title: Stress reactivity tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: cortisol_sensitivity_tendency
+  title: Cortisol sensitivity tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: emotional_recovery_speed_tendency
+  title: Emotional recovery speed tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: cognitive_fatigue_susceptibility
+  title: Cognitive fatigue susceptibility
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: focus_sustainability_tendency
+  title: Focus sustainability tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: attention_switching_tendency
+  title: Attention switching tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: working_memory_load_tolerance
+  title: Working memory load tolerance
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: motivation_from_novelty_tendency
+  title: Motivation from novelty tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: impulsivity_tendency
+  title: Impulsivity tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: risk_sensitivity_tendency
+  title: Risk sensitivity tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: decision_making_speed_tendency
+  title: Decision-making speed tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: procrastination_susceptibility_tendency
+  title: Procrastination susceptibility tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: task_persistence_tendency
+  title: Task persistence tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: mental_endurance_tendency
+  title: Mental endurance tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: mind_wandering_tendency
+  title: Mind-wandering tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: learning_from_repetition_tendency
+  title: Learning from repetition tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: response_to_caffeine_for_focus_tendency
+  title: Response to caffeine for focus tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: stress_induced_sleep_disruption_tendency
+  title: Stress-induced sleep disruption tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: emotional_regulation_tendency
+  title: Emotional regulation tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: resilience_after_setbacks_tendency
+  title: Resilience after setbacks tendency
+  snps:
+  - rs53576
+  - rs4680
+  - rs6311
+  - rs6265
+  - rs1800497
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+Nutrition:
+- id: caffeine_metabolism_speed
+  title: Caffeine metabolism speed
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: caffeine_sleep_disruption_tendency
+  title: Caffeine sleep disruption tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: alcohol_metabolism_rate
+  title: Alcohol metabolism rate
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: carbohydrate_sensitivity_tendency
+  title: Carbohydrate sensitivity tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: post_meal_glucose_spike_tendency
+  title: Post-meal glucose spike tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: fat_oxidation_efficiency
+  title: Fat oxidation efficiency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: protein_utilization_efficiency
+  title: Protein utilization efficiency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: fiber_fermentation_tendency
+  title: Fiber fermentation tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: appetite_regulation_tendency
+  title: Appetite regulation tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: craving_susceptibility_tendency
+  title: Craving susceptibility tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: sweet_taste_preference_tendency
+  title: Sweet taste preference tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: bitter_taste_sensitivity
+  title: Bitter taste sensitivity
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: salt_sensitivity_tendency
+  title: Salt sensitivity tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: hydration_efficiency_tendency
+  title: Hydration efficiency tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: omega_3_response_efficiency
+  title: Omega-3 response efficiency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: vitamin_d_synthesis_efficiency
+  title: Vitamin D synthesis efficiency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: folate_metabolism_tendency
+  title: Folate metabolism tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: iron_absorption_tendency
+  title: Iron absorption tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: response_to_intermittent_fasting_tendency
+  title: Response to intermittent fasting tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: meal_timing_sensitivity_tendency
+  title: Meal timing sensitivity tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: stress_related_eating_tendency
+  title: Stress-related eating tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: lactose_digestion_tolerance_tendency
+  title: Lactose digestion tolerance tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: electrolyte_balance_tendency
+  title: Electrolyte balance tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: antioxidant_utilization_tendency
+  title: Antioxidant utilization tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: response_to_high_fat_meals
+  title: Response to high-fat meals
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: response_to_high_carb_meals
+  title: Response to high-carb meals
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: satiety_signaling_tendency
+  title: Satiety signaling tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: snacking_tendency
+  title: Snacking tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: morning_hydration_benefit_tendency
+  title: Morning hydration benefit tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+- id: caffeine_performance_boost_tendency
+  title: Caffeine performance boost tendency
+  snps:
+  - rs762551
+  - rs1801133
+  - rs671
+  - rs9939609
+  - rs4988235
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Moderate
+Sensory:
+- id: light_sensitivity_tendency
+  title: Light sensitivity tendency
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: blue_light_sensitivity_tendency
+  title: Blue-light sensitivity tendency
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sound_sensitivity_tendency
+  title: Sound sensitivity tendency
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: motion_sensitivity_tendency
+  title: Motion sensitivity tendency
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: screen_fatigue_susceptibility
+  title: Screen fatigue susceptibility
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: olfactory_sensitivity_tendency
+  title: Olfactory sensitivity tendency
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: taste_bitterness_sensitivity
+  title: Taste bitterness sensitivity
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: taste_sweetness_sensitivity
+  title: Taste sweetness sensitivity
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: environmental_noise_tolerance
+  title: Environmental noise tolerance
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sensory_overload_susceptibility
+  title: Sensory overload susceptibility
+  snps:
+  - rs713598
+  - rs1726866
+  - rs10246939
+  - rs12913832
+  - rs1042713
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+Sleep:
+- id: chronotype_tendency
+  title: Chronotype tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sleep_duration_tendency
+  title: Sleep duration tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sleep_onset_latency_tendency
+  title: Sleep onset latency tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sleep_fragmentation_susceptibility
+  title: Sleep fragmentation susceptibility
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sleep_recovery_efficiency
+  title: Sleep recovery efficiency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: caffeine_related_sleep_disruption
+  title: Caffeine-related sleep disruption
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: light_sensitivity_during_sleep
+  title: Light sensitivity during sleep
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: noise_sensitivity_during_sleep
+  title: Noise sensitivity during sleep
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: stress_related_insomnia_tendency
+  title: Stress-related insomnia tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sleep_inertia_severity_tendency
+  title: Sleep inertia severity tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: nap_benefit_tendency
+  title: Nap benefit tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: evening_alertness_tendency
+  title: Evening alertness tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: morning_grogginess_tendency
+  title: Morning grogginess tendency
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: sleep_consistency_sensitivity
+  title: Sleep consistency sensitivity
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited
+- id: circadian_rhythm_stability
+  title: Circadian rhythm stability
+  snps:
+  - rs1801260
+  - rs4580704
+  - rs3736544
+  - rs4753426
+  - rs1823125
+  explanation: Genetic variants are associated with this trait in population-level studies.
+  why_it_matters: This tendency can influence daily habits and lifestyle planning.
+  recommendations:
+  - Observe how this shows up in your daily routine.
+  - Adjust habits gradually and track outcomes.
+  what_it_does_not_mean: This does not provide medical diagnosis or treatment.
+  evidence_strength: Limited

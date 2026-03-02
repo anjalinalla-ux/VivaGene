@@ -1,0 +1,75 @@
+{
+  "trait_id": "LIVER_HEPATIC_LIPID_TRANSPORT_TENDENCY_002_PRS_V1",
+  "category": "Liver",
+  "subcategory": "Liver fat & metabolism",
+  "trait_name": "Hepatic lipid transport tendency",
+  "description_public": "This trait pack is scaffolded and will be expanded with curated variants and citations.",
+  "is_optional": true,
+  "variants": [
+    {
+      "rsid": "rsTBD_1",
+      "gene": "GENE_TBD",
+      "effect_allele": "A",
+      "other_allele": "G",
+      "weight": 0.0,
+      "unit": "beta",
+      "genotype_map": {
+        "AA": {
+          "effect_level": "Unknown",
+          "effect_label": "Coming soon",
+          "notes": "Variant-level interpretation is in progress."
+        },
+        "AG": {
+          "effect_level": "Unknown",
+          "effect_label": "Coming soon",
+          "notes": "Variant-level interpretation is in progress."
+        },
+        "GG": {
+          "effect_level": "Unknown",
+          "effect_label": "Coming soon",
+          "notes": "Variant-level interpretation is in progress."
+        }
+      },
+      "evidence_strength": "Preliminary",
+      "citations": [
+        "PMID:TBD"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "citation_id": "PMID:TBD",
+      "citation_type": "PMID",
+      "title": "Placeholder evidence for Hepatic lipid transport tendency",
+      "year": 2020,
+      "journal": "TBD Journal",
+      "url": "https://example.org/tbd",
+      "quote": "Evidence retrieval pending for this scaffold trait.",
+      "claim_tags": [
+        "hepatic_lipid_transport_tendency",
+        "placeholder",
+        "general_population"
+      ]
+    }
+  ],
+  "limitations": [
+    "Not deterministic",
+    "Population-specific effects possible"
+  ],
+  "safety": [
+    "Educational only",
+    "Not medical advice"
+  ],
+  "metadata": {
+    "curation_status": "Placeholder",
+    "last_updated": "2026-02-15",
+    "source_notes": "Placeholder created to complete ontology coverage."
+  },
+  "completeness": {
+    "score": 90,
+    "missing": [
+      "metadata_complete"
+    ],
+    "status": "Complete"
+  }
+}

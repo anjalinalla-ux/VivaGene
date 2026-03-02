@@ -1,0 +1,79 @@
+{
+  "trait_id": "FIT_ACTN3",
+  "queries": [
+    "ACTN3 rs1815739 Muscle power vs endurance tendency",
+    "ACTN3 polymorphism VO2",
+    "rs1815739 association VO2"
+  ],
+  "citations": [
+    {
+      "pmid": "41010024",
+      "pmcid": "PMC12470077",
+      "doi": "10.3390/genes16091079",
+      "title": "Physical Performance and Sports Genetics: A Systematic Review of Candidate Gene Polymorphisms Involved in Team Sports.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/41010024"
+    },
+    {
+      "pmid": "40497958",
+      "pmcid": "PMC12153841",
+      "doi": "10.3390/cells14110782",
+      "title": "The Influence of the ACTN3 R577X Genotype on Performance in Brazilian National-Level Decathlon Athletes: A Pilot Study.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/40497958"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "<b>Background/Objectives</b>: This systematic review aimed to gather the most recent evidence regarding the link between genetic polymorphisms and physical performance in team sports, with a focus on the practical utility of this information for athlete selection, training personalization, and injury prevention.",
+      "citation": {
+        "pmid": "41010024",
+        "pmcid": "PMC12470077",
+        "doi": "10.3390/genes16091079",
+        "title": "Physical Performance and Sports Genetics: A Systematic Review of Candidate Gene Polymorphisms Involved in Team Sports.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41010024"
+      }
+    },
+    {
+      "text": "<b>Methods</b>: Sixteen studies published between 2018 and 2025 were analyzed and selected from six international databases, in accordance with the PRISMA guideline.",
+      "citation": {
+        "pmid": "41010024",
+        "pmcid": "PMC12470077",
+        "doi": "10.3390/genes16091079",
+        "title": "Physical Performance and Sports Genetics: A Systematic Review of Candidate Gene Polymorphisms Involved in Team Sports.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41010024"
+      }
+    },
+    {
+      "text": "<h4>Background</h4>Decathlon is a multimodality sport that requires the combination of endurance, strength, speed, and agility.",
+      "citation": {
+        "pmid": "40497958",
+        "pmcid": "PMC12153841",
+        "doi": "10.3390/cells14110782",
+        "title": "The Influence of the ACTN3 R577X Genotype on Performance in Brazilian National-Level Decathlon Athletes: A Pilot Study.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40497958"
+      }
+    },
+    {
+      "text": "A polymorphism present in the gene encoding for alpha-actinin-3 (<i>ACTN3</i>) potentially influences sports performance, since this protein is a structural component of skeletal muscle contributing to muscle contraction effectiveness.<h4>Aim</h4>To investigate whether the presence of the <i>ACTN3 R577X</i> polymorphism is associated with decathlon athletes' performance in the different modalities of decathlon.<h4>Methods</h4>Thirty-one male athletes from the Brazilian national federation of decathlon aged between 18 and 50 years were genotyped for the <i>ACTN3 R577X</i> polymorphism using real-time polymerase chain reaction (RT-PCR).",
+      "citation": {
+        "pmid": "40497958",
+        "pmcid": "PMC12153841",
+        "doi": "10.3390/cells14110782",
+        "title": "The Influence of the ACTN3 R577X Genotype on Performance in Brazilian National-Level Decathlon Athletes: A Pilot Study.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40497958"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:25.860938+00:00"
+}

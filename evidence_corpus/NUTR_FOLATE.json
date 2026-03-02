@@ -1,0 +1,79 @@
+{
+  "trait_id": "NUTR_FOLATE",
+  "queries": [
+    "MTHFR rs1801133 Folate metabolism tendency",
+    "MTHFR polymorphism lipid",
+    "rs1801133 association lipid"
+  ],
+  "citations": [
+    {
+      "pmid": "41426969",
+      "pmcid": "PMC12715492",
+      "doi": "10.17691/stm2025.17.5.05",
+      "title": "Genetic Scale for Predicting the No-Reflow Phenomenon in Myocardial Infarction.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/41426969"
+    },
+    {
+      "pmid": "41300894",
+      "pmcid": "PMC12651033",
+      "doi": "10.3390/diagnostics15222870",
+      "title": "Common Methylenetetrahydrofolate Reductase Polymorphism &lt;i&gt;MTHFR 677C&gt;T&lt;/i&gt; (rs1801133), Plasma Homocysteine, and Non-Valvular Atrial Fibrillation in Overweight/Obese Patients: Causality Indicated by Mediation and One-Sample Mendelian Randomization Analysis.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/41300894"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "<b>The aim of the study is</b> to investigate the association of the selected single nucleotide polymorphisms (SNPs) with the development of the no-reflow phenomenon during percutaneous coronary intervention (PCI) in patients with ST-segment elevation myocardial infarction (STEMI) and to create a genetic scale for predicting this complication.<h4>Materials and methods</h4>A single-center matched case-control study was conducted.",
+      "citation": {
+        "pmid": "41426969",
+        "pmcid": "PMC12715492",
+        "doi": "10.17691/stm2025.17.5.05",
+        "title": "Genetic Scale for Predicting the No-Reflow Phenomenon in Myocardial Infarction.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41426969"
+      }
+    },
+    {
+      "text": "The study included 80 STEMI patients: 40 (50%) with no-reflow and 40 (50%) without no-reflow (1:1 matching by sex and age).",
+      "citation": {
+        "pmid": "41426969",
+        "pmcid": "PMC12715492",
+        "doi": "10.17691/stm2025.17.5.05",
+        "title": "Genetic Scale for Predicting the No-Reflow Phenomenon in Myocardial Infarction.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41426969"
+      }
+    },
+    {
+      "text": "<b>Background/Objectives</b>: The causal role of homocysteine (tHcy) in atrial fibrillation (AF) is unclear.",
+      "citation": {
+        "pmid": "41300894",
+        "pmcid": "PMC12651033",
+        "doi": "10.3390/diagnostics15222870",
+        "title": "Common Methylenetetrahydrofolate Reductase Polymorphism &lt;i&gt;MTHFR 677C&gt;T&lt;/i&gt; (rs1801133), Plasma Homocysteine, and Non-Valvular Atrial Fibrillation in Overweight/Obese Patients: Causality Indicated by Mediation and One-Sample Mendelian Randomization Analysis.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41300894"
+      }
+    },
+    {
+      "text": "To (re)explore the causal effect of tHcy in non-valvular AF (NVAF).",
+      "citation": {
+        "pmid": "41300894",
+        "pmcid": "PMC12651033",
+        "doi": "10.3390/diagnostics15222870",
+        "title": "Common Methylenetetrahydrofolate Reductase Polymorphism &lt;i&gt;MTHFR 677C&gt;T&lt;/i&gt; (rs1801133), Plasma Homocysteine, and Non-Valvular Atrial Fibrillation in Overweight/Obese Patients: Causality Indicated by Mediation and One-Sample Mendelian Randomization Analysis.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41300894"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:27.739353+00:00"
+}

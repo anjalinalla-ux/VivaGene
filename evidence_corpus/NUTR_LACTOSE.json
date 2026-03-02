@@ -1,0 +1,67 @@
+{
+  "trait_id": "NUTR_LACTOSE",
+  "queries": [
+    "LCT rs4988235 Lactose tolerance",
+    "LCT polymorphism lipid",
+    "rs4988235 association lipid"
+  ],
+  "citations": [
+    {
+      "pmid": "40900492",
+      "pmcid": "PMC12377878",
+      "doi": "10.17843/rpmesp.2025.422.14223",
+      "title": "[Genetic ancestry and the SNP RS4988235 of lactose tolerance in the population of Lima].",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/40900492"
+    },
+    {
+      "pmid": "41482367",
+      "pmcid": "PMC12764234",
+      "doi": "10.21873/invivo.14183",
+      "title": "Frequency and Diagnostic Utility of the -13910C&gt;T &lt;i&gt;MCM6&lt;/i&gt; Gene Polymorphism for Lactose Intolerance in a Brazilian Northeast Population.",
+      "year": "2026",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/41482367"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "[Genetic ancestry and the SNP RS4988235 of lactose tolerance in the population of Lima].",
+      "citation": {
+        "pmid": "40900492",
+        "pmcid": "PMC12377878",
+        "doi": "10.17843/rpmesp.2025.422.14223",
+        "title": "[Genetic ancestry and the SNP RS4988235 of lactose tolerance in the population of Lima].",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40900492"
+      }
+    },
+    {
+      "text": "<h4>Background/aim</h4>Lactose intolerance (LI) is a common clinical condition associated with reduced lactase enzyme activity.",
+      "citation": {
+        "pmid": "41482367",
+        "pmcid": "PMC12764234",
+        "doi": "10.21873/invivo.14183",
+        "title": "Frequency and Diagnostic Utility of the -13910C&gt;T &lt;i&gt;MCM6&lt;/i&gt; Gene Polymorphism for Lactose Intolerance in a Brazilian Northeast Population.",
+        "year": "2026",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41482367"
+      }
+    },
+    {
+      "text": "The oral lactose tolerance test (OLTT), although widely used for diagnosis, has several limitations such as fasting, multiple blood collections, and gastrointestinal discomfort.",
+      "citation": {
+        "pmid": "41482367",
+        "pmcid": "PMC12764234",
+        "doi": "10.21873/invivo.14183",
+        "title": "Frequency and Diagnostic Utility of the -13910C&gt;T &lt;i&gt;MCM6&lt;/i&gt; Gene Polymorphism for Lactose Intolerance in a Brazilian Northeast Population.",
+        "year": "2026",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41482367"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:28.688597+00:00"
+}

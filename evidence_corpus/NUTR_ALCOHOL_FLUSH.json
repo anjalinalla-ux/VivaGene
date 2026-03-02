@@ -1,0 +1,79 @@
+{
+  "trait_id": "NUTR_ALCOHOL_FLUSH",
+  "queries": [
+    "ALDH2 rs671 Alcohol flush reaction tendency",
+    "ALDH2 polymorphism lipid",
+    "rs671 association lipid"
+  ],
+  "citations": [
+    {
+      "pmid": "41217648",
+      "pmcid": "PMC12616758",
+      "doi": "10.1007/s12672-025-03512-0",
+      "title": "Global research landscapes of ALDH2 and cancer revealed by bibliometric analysis.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/41217648"
+    },
+    {
+      "pmid": "38604748",
+      "pmcid": "PMC11361852",
+      "doi": "10.15283/ijsc23151",
+      "title": "Impaired Osteogenesis in Human Induced Pluripotent Stem Cells with Acetaldehyde Dehydrogenase 2 Mutations.",
+      "year": "2024",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/38604748"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "Recent years have seen a marked increase in studies focusing on the mechanistic role of Aldehyde dehydrogenase 2 (ALDH2) genetic polymorphisms in tumors, yet this field lacks systematic bibliometric analysis.",
+      "citation": {
+        "pmid": "41217648",
+        "pmcid": "PMC12616758",
+        "doi": "10.1007/s12672-025-03512-0",
+        "title": "Global research landscapes of ALDH2 and cancer revealed by bibliometric analysis.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41217648"
+      }
+    },
+    {
+      "text": "By analyzing publication years, countries/regions, research institutions, disciplinary domains, authorship networks, journal distributions, and keyword networks, this study reveals that global research interest in ALDH2 and tumors continues to rise.",
+      "citation": {
+        "pmid": "41217648",
+        "pmcid": "PMC12616758",
+        "doi": "10.1007/s12672-025-03512-0",
+        "title": "Global research landscapes of ALDH2 and cancer revealed by bibliometric analysis.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41217648"
+      }
+    },
+    {
+      "text": "Acetaldehyde dehydrogenase 2 (ALDH2) is the second enzyme involved in the breakdown of acetaldehyde into acetic acid during the process of alcohol metabolism.",
+      "citation": {
+        "pmid": "38604748",
+        "pmcid": "PMC11361852",
+        "doi": "10.15283/ijsc23151",
+        "title": "Impaired Osteogenesis in Human Induced Pluripotent Stem Cells with Acetaldehyde Dehydrogenase 2 Mutations.",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/38604748"
+      }
+    },
+    {
+      "text": "Roughly 40% of East Asians carry one or two ALDH2*2 alleles, and the presence of <i>ALDH2</i> genetic mutations in individuals may affect the bone remodeling cycle owing to accumulation of acetaldehyde in the body.",
+      "citation": {
+        "pmid": "38604748",
+        "pmcid": "PMC11361852",
+        "doi": "10.15283/ijsc23151",
+        "title": "Impaired Osteogenesis in Human Induced Pluripotent Stem Cells with Acetaldehyde Dehydrogenase 2 Mutations.",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/38604748"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:26.793656+00:00"
+}

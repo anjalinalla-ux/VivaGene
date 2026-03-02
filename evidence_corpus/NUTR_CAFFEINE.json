@@ -1,0 +1,79 @@
+{
+  "trait_id": "NUTR_CAFFEINE",
+  "queries": [
+    "CYP1A2 rs762551 Caffeine metabolism speed",
+    "CYP1A2 polymorphism lipid",
+    "rs762551 association lipid"
+  ],
+  "citations": [
+    {
+      "pmid": "40579619",
+      "pmcid": "PMC12296924",
+      "doi": "10.1007/s40279-025-02245-y",
+      "title": "Caffeine and Sports Performance: The Conflict between Caffeine Intake to Enhance Performance and Avoiding Caffeine to Ensure Sleep Quality.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/40579619"
+    },
+    {
+      "pmid": "39042267",
+      "pmcid": "PMC11266271",
+      "doi": "10.1007/s11033-024-09800-2",
+      "title": "Exploring the relationship between caffeine metabolism-related CYP1A2 rs762551 polymorphism and team sport athlete status and training adaptations.",
+      "year": "2024",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/39042267"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "The ergogenic effects of caffeine have been reported in scientific literature over a wide spectrum of sporting activities.",
+      "citation": {
+        "pmid": "40579619",
+        "pmcid": "PMC12296924",
+        "doi": "10.1007/s40279-025-02245-y",
+        "title": "Caffeine and Sports Performance: The Conflict between Caffeine Intake to Enhance Performance and Avoiding Caffeine to Ensure Sleep Quality.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40579619"
+      }
+    },
+    {
+      "text": "The current recommendation for caffeine supplementation is ingesting ~ 3-6 mg/kg about 1 h before the onset of exercise.",
+      "citation": {
+        "pmid": "40579619",
+        "pmcid": "PMC12296924",
+        "doi": "10.1007/s40279-025-02245-y",
+        "title": "Caffeine and Sports Performance: The Conflict between Caffeine Intake to Enhance Performance and Avoiding Caffeine to Ensure Sleep Quality.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/40579619"
+      }
+    },
+    {
+      "text": "<h4>Background</h4>This study aimed to achieve a dual objective: to compare the frequencies of CYP1A2 rs762551 genotypes between team sport athletes and a control group, and to determine the association between the rs762551 polymorphism and changes in physical performance after a six-week training program among elite basketball players.<h4>Methods</h4>The study encompassed an analysis of 504 individuals, comprising 320 athletes and 184 controls.",
+      "citation": {
+        "pmid": "39042267",
+        "pmcid": "PMC11266271",
+        "doi": "10.1007/s11033-024-09800-2",
+        "title": "Exploring the relationship between caffeine metabolism-related CYP1A2 rs762551 polymorphism and team sport athlete status and training adaptations.",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/39042267"
+      }
+    },
+    {
+      "text": "For the Turkish cohort, DNA was isolated using the buccal swab method, and genotyping was conducted using the KASP technique.",
+      "citation": {
+        "pmid": "39042267",
+        "pmcid": "PMC11266271",
+        "doi": "10.1007/s11033-024-09800-2",
+        "title": "Exploring the relationship between caffeine metabolism-related CYP1A2 rs762551 polymorphism and team sport athlete status and training adaptations.",
+        "year": "2024",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/39042267"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:24.913125+00:00"
+}

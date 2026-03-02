@@ -11,8 +11,24 @@ from genomics_polygenic import normalize_genotype as poly_normalize_genotype, co
 from rag_retriever import evidence_quality
 from rag_generator import generate_trait_explanation_rag
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = "mistralai/mistral-7b-instruct"
+try:
+    import streamlit as st
+except Exception:
+    st = None
+
+
+def _get_secret(name: str, default: str = "") -> str:
+    if st is not None:
+        try:
+            value = st.secrets.get(name, os.getenv(name, default))
+            return str(value or "").strip()
+        except Exception:
+            pass
+    return str(os.getenv(name, default) or "").strip()
+
+
+OPENROUTER_API_KEY = _get_secret("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = _get_secret("OPENROUTER_MODEL", "mistralai/mistral-7b-instruct")
 client = (
     OpenAI(api_key=OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1")
     if OPENROUTER_API_KEY

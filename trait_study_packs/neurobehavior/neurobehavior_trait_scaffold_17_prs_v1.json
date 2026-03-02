@@ -1,0 +1,75 @@
+{
+  "trait_id": "NEURO_NEUROBEHAVIOR_TRAIT_SCAFFOLD_17_017_PRS_V1",
+  "category": "Neurobehavior",
+  "subcategory": "Cognition",
+  "trait_name": "Neurobehavior trait scaffold 17",
+  "description_public": "This trait pack is scaffolded and will be expanded with curated variants and citations.",
+  "is_optional": false,
+  "variants": [
+    {
+      "rsid": "rsTBD_1",
+      "gene": "GENE_TBD",
+      "effect_allele": "A",
+      "other_allele": "G",
+      "weight": 0.0,
+      "unit": "beta",
+      "genotype_map": {
+        "AA": {
+          "effect_level": "Unknown",
+          "effect_label": "Coming soon",
+          "notes": "Variant-level interpretation is in progress."
+        },
+        "AG": {
+          "effect_level": "Unknown",
+          "effect_label": "Coming soon",
+          "notes": "Variant-level interpretation is in progress."
+        },
+        "GG": {
+          "effect_level": "Unknown",
+          "effect_label": "Coming soon",
+          "notes": "Variant-level interpretation is in progress."
+        }
+      },
+      "evidence_strength": "Preliminary",
+      "citations": [
+        "PMID:TBD"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "citation_id": "PMID:TBD",
+      "citation_type": "PMID",
+      "title": "Placeholder evidence for Neurobehavior trait scaffold 17",
+      "year": 2020,
+      "journal": "TBD Journal",
+      "url": "https://example.org/tbd",
+      "quote": "Evidence retrieval pending for this scaffold trait.",
+      "claim_tags": [
+        "neurobehavior_trait_scaffold_17",
+        "placeholder",
+        "general_population"
+      ]
+    }
+  ],
+  "limitations": [
+    "Not deterministic",
+    "Population-specific effects possible"
+  ],
+  "safety": [
+    "Educational only",
+    "Not medical advice"
+  ],
+  "metadata": {
+    "curation_status": "Placeholder",
+    "last_updated": "2026-02-15",
+    "source_notes": "Placeholder created to complete ontology coverage."
+  },
+  "completeness": {
+    "score": 90,
+    "missing": [
+      "metadata_complete"
+    ],
+    "status": "Complete"
+  }
+}

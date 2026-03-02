@@ -1,0 +1,79 @@
+{
+  "trait_id": "NUTR_OMEGA3",
+  "queries": [
+    "FADS1 rs174546 Omega-3 processing tendency",
+    "FADS1 polymorphism lipid",
+    "rs174546 association lipid"
+  ],
+  "citations": [
+    {
+      "pmid": "37426732",
+      "pmcid": "PMC10328206",
+      "doi": "10.1177/15598276221117102",
+      "title": "A Systematic Review of Omega-3 Consumption and Neuroprotective Cognitive Outcomes.",
+      "year": "2023",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/37426732"
+    },
+    {
+      "pmid": "41441000",
+      "pmcid": "PMC12735183",
+      "doi": "10.3390/metabo15120758",
+      "title": "&lt;i&gt;FADS1&lt;/i&gt; and &lt;i&gt;FADS2&lt;/i&gt; Gene Polymorphisms Affect Omega-3 and Omega-6 Erythrocyte Fatty Acid Composition and Influence the Association Between Dietary Fatty Acid Intake and Lipid Profile in Brazilian Adults.",
+      "year": "2025",
+      "journal": "",
+      "url": "https://europepmc.org/article/MED/41441000"
+    }
+  ],
+  "snippets": [
+    {
+      "text": "<h4>Context</h4>While a great deal of interest has been accorded to the cognitive effects of n-3 long-chain polyunsaturated fatty acids (LC PUFAs), there is a need for systematic review data that assess this outcome across the lifespan, accounting for population differences and highlighting methodological limitations of extant studies.<h4>Objective</h4>This systematic review addresses the effects of n-3s on human cognition and provides an overview on the current state of research and recommendations for future efforts.<h4>Data sources</h4>Based on a thorough review of highly powered articles from PubMed (MEDLINE), Web of Science, and ProQuest Central, the authors evaluated articles published between 2000 and 2020 assessing LC PUFA status on cognition as a primary outcome measure.",
+      "citation": {
+        "pmid": "37426732",
+        "pmcid": "PMC10328206",
+        "doi": "10.1177/15598276221117102",
+        "title": "A Systematic Review of Omega-3 Consumption and Neuroprotective Cognitive Outcomes.",
+        "year": "2023",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/37426732"
+      }
+    },
+    {
+      "text": "Using the PRISMA guidelines, the researchers' primary aim was to provide a comprehensive overview of the articles.<h4>Conclusions</h4>The results indicate inconsistent effects of intervention, with benefits for specific groups on specific outcomes.",
+      "citation": {
+        "pmid": "37426732",
+        "pmcid": "PMC10328206",
+        "doi": "10.1177/15598276221117102",
+        "title": "A Systematic Review of Omega-3 Consumption and Neuroprotective Cognitive Outcomes.",
+        "year": "2023",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/37426732"
+      }
+    },
+    {
+      "text": "<b>Background:</b> Polymorphisms in the <i>FADS1</i> and <i>FADS2</i> genes influence fatty acid metabolism.",
+      "citation": {
+        "pmid": "41441000",
+        "pmcid": "PMC12735183",
+        "doi": "10.3390/metabo15120758",
+        "title": "&lt;i&gt;FADS1&lt;/i&gt; and &lt;i&gt;FADS2&lt;/i&gt; Gene Polymorphisms Affect Omega-3 and Omega-6 Erythrocyte Fatty Acid Composition and Influence the Association Between Dietary Fatty Acid Intake and Lipid Profile in Brazilian Adults.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41441000"
+      }
+    },
+    {
+      "text": "However, evidence of gene-diet interactions in population-based studies from Brazil remains limited.",
+      "citation": {
+        "pmid": "41441000",
+        "pmcid": "PMC12735183",
+        "doi": "10.3390/metabo15120758",
+        "title": "&lt;i&gt;FADS1&lt;/i&gt; and &lt;i&gt;FADS2&lt;/i&gt; Gene Polymorphisms Affect Omega-3 and Omega-6 Erythrocyte Fatty Acid Composition and Influence the Association Between Dietary Fatty Acid Intake and Lipid Profile in Brazilian Adults.",
+        "year": "2025",
+        "journal": "",
+        "url": "https://europepmc.org/article/MED/41441000"
+      }
+    }
+  ],
+  "retrieved_at": "2026-03-02T14:01:31.417407+00:00"
+}
