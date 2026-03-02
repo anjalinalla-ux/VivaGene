@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import textwrap
 import traceback
 from io import BytesIO
 from pathlib import Path
@@ -257,29 +258,34 @@ def build_category_panel_html(category: str, traits: list[dict]) -> str:
         else:
             citations_html = "<div class='trait-citations-empty'>No citations available yet for this trait.</div>"
         cards.append(
-            f"""
-            <div class='trait-mini-card'>
-              <div class='trait-mini-title'>{trait_name}</div>
-              <div class='trait-mini-meta'>Gene {gene} · rsID {rsid} · Genotype {genotype}</div>
-              <div class='trait-mini-meta'>Signal {effect_line}</div>
-              <div class='trait-mini-expl'>{expl}</div>
-              <div class='trait-mini-cite-label'>Citations</div>
-              {citations_html}
-            </div>
-            """
+            textwrap.dedent(
+                f"""
+                <div class='trait-mini-card'>
+                  <div class='trait-mini-title'>{trait_name}</div>
+                  <div class='trait-mini-meta'>Gene {gene} · rsID {rsid} · Genotype {genotype}</div>
+                  <div class='trait-mini-meta'>Signal {effect_line}</div>
+                  <div class='trait-mini-expl'>{expl}</div>
+                  <div class='trait-mini-cite-label'>Citations</div>
+                  {citations_html}
+                </div>
+                """
+            ).strip()
         )
     count = len([t for t in traits if isinstance(t, dict)])
-    return f"""
-    <div class='results-panel'>
-      <div class='results-panel-header'>
-        <span>{_html_escape(category)}</span>
-        <span class='results-count'>{count}</span>
-      </div>
-      <div class='results-panel-body'>
-        {''.join(cards)}
-      </div>
-    </div>
-    """
+    cards_html = "\n".join(cards)
+    return textwrap.dedent(
+        f"""
+        <div class='results-panel'>
+          <div class='results-panel-header'>
+            <span>{_html_escape(category)}</span>
+            <span class='results-count'>{count}</span>
+          </div>
+          <div class='results-panel-body'>
+            {cards_html}
+          </div>
+        </div>
+        """
+    ).strip()
 
 
 def build_filtered_report(report_obj, selected_traits):
@@ -2161,6 +2167,7 @@ elif page == "Upload & Report":
                             traits_cat = grouped.get(cat_name, [])
                             with panel_cols[idx]:
                                 st.markdown(build_category_panel_html(cat_name, traits_cat), unsafe_allow_html=True)
+                        st.markdown("<div style='color:#10b981;font-weight:600;'>Rendered HTML OK</div>", unsafe_allow_html=True)
 
                         st.markdown("#### Fetch evidence for a single trait")
                         if trait_ids_for_fetch:
