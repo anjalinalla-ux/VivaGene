@@ -1,22 +1,22 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from rag_evidence import build_trait_queries
+from genomics_interpreter import build_prs_report_from_upload
+from utils.rag_explainer import generate_trait_explanation
 
 
-def test_query_builder_returns_multiple_queries():
-    trait = {
-        "trait_id": "NB_SLEEP_001",
-        "trait_name": "Sleep duration tendency",
-        "category": "Neurobehavior",
-        "gene": "ADORA2A",
-        "rsid": "rs5751876",
-    }
-    queries = build_trait_queries(trait)
-    assert isinstance(queries, list)
-    assert len(queries) >= 2
-    assert any("ADORA2A" in q for q in queries)
+def test_report_traits_get_renderable_explanation_strings():
+    report = build_prs_report_from_upload(
+        genotype_path="patient_A.txt",
+        categories_selected=["Neurobehavior", "Nutrition", "Fitness"],
+        include_optional_liver=False,
+        red_flag_only=False,
+    )
+    traits = [t for t in report.get("traits", []) if isinstance(t, dict)]
+    assert traits
+    for trait in traits[:20]:
+        out = generate_trait_explanation(trait, [], mode="patient")
+        assert isinstance(out.get("explanation", ""), str)
+        assert out.get("explanation", "").strip() != ""

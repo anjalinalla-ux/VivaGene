@@ -29,7 +29,7 @@ from rag_retrieval import load_study_packs, retrieve_evidence
 from polygenic import compute_prs
 from evidence_guard import enforce_evidence_only
 from utils.evidence_retrieval import retrieve_trait_evidence
-from rag_explainer import generate_trait_explanation
+from utils.rag_explainer import generate_trait_explanation
 from study_pack_loader import load_all_trait_packs
 from prompts import LLM_SAFETY_SYSTEM
 try:
