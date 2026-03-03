@@ -5,10 +5,12 @@ import re
 import subprocess
 import sys
 import textwrap
-import traceback
 import base64
+import hashlib
+import time
 from io import BytesIO
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -18,7 +20,6 @@ from genomics_interpreter import (
     TRAITS_JSON_PATH,
     load_traits_catalog,
     build_prs_report_from_upload,
-    generate_text_report,
     generate_html_report,
     parse_genotype_file,
 )
@@ -27,9 +28,10 @@ from utils.trait_quality import compute_trait_completeness, trait_has_variants
 from rag_retrieval import load_study_packs, retrieve_evidence
 from polygenic import compute_prs
 from evidence_guard import enforce_evidence_only
-from rag_evidence import ensure_trait_evidence
-from explain import build_explanation
+from evidence_retrieval import retrieve_trait_evidence
+from rag_explainer import generate_trait_explanation
 from study_pack_loader import load_all_trait_packs
+from prompts import LLM_SAFETY_SYSTEM
 try:
     from openai import OpenAI
 except Exception:
@@ -39,6 +41,8 @@ STUDY_PACK_DIR = BASE_DIR / "trait_study_packs"
 ASSETS_DIR = BASE_DIR / "assets"
 VIVAGENE_LOGO_PATH = ASSETS_DIR / "vivagene_logo.svg"
 VIVAGENE_MARK_PATH = ASSETS_DIR / "vivagene_mark.png"
+CACHE_UPLOAD_DIR = BASE_DIR / ".cache_uploads"
+ENGINE_VERSION = "v1"
 
 
 def get_secret(name: str, default: str = "") -> str:
@@ -202,6 +206,53 @@ def two_sentence_text(text: str) -> str:
     parts = re.split(r"(?<=[.!?])\s+", raw)
     out = [p for p in parts if p.strip()][:2]
     return " ".join(out).strip()
+
+
+def _clip_text(s: str, limit: int) -> str:
+    txt = " ".join(str(s or "").split())
+    if len(txt) <= limit:
+        return txt
+    return txt[:limit].rstrip() + "..."
+
+
+def _safe_json_obj(text: str):
+    raw = str(text or "").strip()
+    if not raw:
+        return {}
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+        if not m:
+            return {}
+        try:
+            obj = json.loads(m.group(0))
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
+
+
+def _stable_traits_hash(items: list[dict]) -> str:
+    payload = []
+    for t in items if isinstance(items, list) else []:
+        if not isinstance(t, dict):
+            continue
+        payload.append(
+            {
+                "trait_id": t.get("trait_id", ""),
+                "trait_name": t.get("trait_name", ""),
+                "gene": t.get("gene", ""),
+                "rsid": t.get("rsid", ""),
+                "genotype": t.get("user_genotype", ""),
+                "signal": t.get("effect_level", t.get("bucket", "")),
+                "effect": t.get("effect_label", ""),
+                "coverage": t.get("coverage", 0.0),
+                "evidence": t.get("evidence_strength", ""),
+                "citations": t.get("sources", t.get("citations", [])),
+            }
+        )
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def fallback_explanation_for_trait(trait: dict, category: str) -> str:
@@ -407,7 +458,12 @@ def render_trait_card(trait: dict, mode_label: str):
     explanation = re.sub(r"<[^>]+>", " ", explanation)
     explanation = _html_escape(" ".join(explanation.split()))
 
-    sources = t.get("_final_citations", t.get("citations", []))
+    lifestyle_one = str(t.get("_lifestyle_one_liner", "")).strip()
+    lifestyle_bullets = t.get("_lifestyle_bullets", [])
+    if not isinstance(lifestyle_bullets, list):
+        lifestyle_bullets = []
+    lifestyle_bullets = [str(x).strip() for x in lifestyle_bullets if str(x).strip()][:3]
+    sources = t.get("_lifestyle_citations", t.get("_final_citations", t.get("citations", [])))
     if not isinstance(sources, list):
         sources = []
 
@@ -420,8 +476,18 @@ def render_trait_card(trait: dict, mode_label: str):
         Gene: <b>{gene}</b> · rsID: <b>{rsid}</b> · Genotype: <b>{gt}</b><br/>
         {f'Coverage: <b>{coverage_txt}</b> · ' if coverage_txt else ''}Evidence: <b>{evidence or 'Unknown'}</b>
       </div>
-      <div class="trait-body">{explanation or 'Evidence pending — no explanatory claims shown yet (RAG safety).'}</div>
+      <div class="trait-body"><b>What this may mean in daily life</b></div>
     """
+    if lifestyle_one:
+        html += f"<div class='trait-body'>{_html_escape(lifestyle_one)}</div>"
+    if lifestyle_bullets:
+        html += "<div class='trait-body'><ul>"
+        for b in lifestyle_bullets:
+            html += f"<li>{_html_escape(b)}</li>"
+        html += "</ul></div>"
+    if not lifestyle_one and not lifestyle_bullets:
+        html += f"<div class='trait-body'>{explanation or 'Evidence pending — no explanatory claims shown yet (RAG safety).'}</div>"
+
     if sources:
         html += "<div class='trait-sources'><b>Sources</b><ul>"
         for s in sources[:3]:
@@ -429,7 +495,10 @@ def render_trait_card(trait: dict, mode_label: str):
                 title = _html_escape(s.get("title", "Study"))
                 url = _html_escape(s.get("url", s.get("source_url", "")))
                 pmid = _html_escape(s.get("pmid", ""))
-                label = f"{title} (PMID: {pmid})" if pmid else title
+                if is_patient:
+                    label = title
+                else:
+                    label = f"{title} (PMID: {pmid})" if pmid else title
                 if url:
                     html += f"<li><a href='{url}' target='_blank'>{label}</a></li>"
                 else:
@@ -438,7 +507,14 @@ def render_trait_card(trait: dict, mode_label: str):
                 html += f"<li>{_html_escape(str(s))}</li>"
         html += "</ul></div>"
     else:
-        html += "<div class='trait-sources trait-muted'>No citations available yet for this trait.</div>"
+        queries = t.get("_queries_used", [])
+        qtxt = ", ".join(_html_escape(str(q)) for q in queries[:2]) if isinstance(queries, list) and queries else "query pending"
+        html += (
+            "<div class='trait-sources trait-muted'>"
+            "Evidence not found in the local corpus yet. This trait will display citations once the study pack is expanded."
+            f" Retrieval status: {qtxt}."
+            "</div>"
+        )
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
@@ -636,9 +712,308 @@ def is_dev_mode():
     return env_flag or secret_flag
 
 
-@st.cache_data(show_spinner=False)
+def genotype_hash_from_bytes(file_bytes: bytes) -> str:
+    return hashlib.sha256(file_bytes or b"").hexdigest()
+
+
+def persist_uploaded_file(file_bytes: bytes, genotype_hash: str) -> Path:
+    CACHE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    path = CACHE_UPLOAD_DIR / f"{genotype_hash}.txt"
+    if not path.exists():
+        path.write_bytes(file_bytes or b"")
+    return path
+
+
+@st.cache_resource(show_spinner=False)
 def cached_load_study_packs(dir_path: str):
     return load_study_packs(dir_path)
+
+
+@st.cache_data(show_spinner=False)
+def cached_parse_genotype(genotype_hash: str):
+    path = CACHE_UPLOAD_DIR / f"{genotype_hash}.txt"
+    if not path.exists():
+        return []
+    rows = parse_genotype_file(str(path))
+    return rows if isinstance(rows, list) else []
+
+
+@st.cache_data(show_spinner=False)
+def cached_build_base_report(genotype_hash: str, categories_selected: tuple[str, ...], include_optional_liver: bool):
+    path = CACHE_UPLOAD_DIR / f"{genotype_hash}.txt"
+    if not path.exists():
+        return {"summary": {"num_traits_found": 0, "categories": []}, "traits": []}
+    report = build_prs_report_from_upload(
+        genotype_path=str(path),
+        categories_selected=list(categories_selected),
+        include_optional_liver=bool(include_optional_liver),
+        red_flag_only=False,
+    )
+    return normalize_report(report)
+
+
+@st.cache_data(show_spinner=False, ttl=604800)
+def cached_retrieve_trait_evidence(trait_payload: dict):
+    t = trait_payload if isinstance(trait_payload, dict) else {}
+    return retrieve_trait_evidence(
+        t,
+        min_citations=2,
+        min_snippets=2,
+        max_results=8,
+        retries=1,
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=604800)
+def cached_generate_trait_explanation(trait_payload: dict, evidence_snippets: list[dict], mode_key: str):
+    return generate_trait_explanation(
+        trait_payload if isinstance(trait_payload, dict) else {},
+        evidence_snippets if isinstance(evidence_snippets, list) else [],
+        mode_key,
+        llm_fn=generate_with_fallback_model,
+    )
+
+
+def build_category_evidence_bundle(category_name: str, traits_in_cat: list[dict]) -> tuple[list[dict], list[dict]]:
+    traits_payload = []
+    evidence_payload = []
+    max_traits = 8
+    max_snippets_per_trait = 2
+    char_budget = 2800
+    used_chars = 0
+
+    for t in [x for x in (traits_in_cat or []) if isinstance(x, dict)][:max_traits]:
+        traits_payload.append(
+            {
+                "trait_name": str(t.get("trait_name", "")).strip(),
+                "gene": str(t.get("gene", "")).strip(),
+                "rsid": str(t.get("rsid", "")).strip(),
+                "genotype": str(t.get("user_genotype", "")).strip(),
+                "signal_bucket": str(t.get("effect_level", t.get("bucket", ""))).strip(),
+                "evidence_strength": str(t.get("evidence_strength", "")).strip(),
+                "coverage": float(t.get("coverage", 0.0) or 0.0) if isinstance(t.get("coverage", 0.0), (int, float)) else 0.0,
+            }
+        )
+
+        snippets = t.get("_evidence_snippets", [])
+        if not isinstance(snippets, list):
+            snippets = []
+        for s in snippets[:max_snippets_per_trait]:
+            if not isinstance(s, dict):
+                continue
+            citation = s.get("citation", s if isinstance(s, dict) else {})
+            row = {
+                "title": str((citation or {}).get("title", s.get("title", ""))).strip(),
+                "year": str((citation or {}).get("year", s.get("year", ""))).strip(),
+                "journal": str((citation or {}).get("journal", "")).strip(),
+                "pmid": str((citation or {}).get("pmid", s.get("pmid", ""))).strip(),
+                "url": str((citation or {}).get("url", s.get("url", ""))).strip(),
+                "snippet_text": _clip_text(s.get("text", s.get("snippet_text", "")), 220),
+            }
+            projected = used_chars + len(row["snippet_text"])
+            if projected > char_budget:
+                break
+            used_chars = projected
+            evidence_payload.append(row)
+
+    return traits_payload, evidence_payload
+
+
+def _category_summary_fallback(category_name: str, traits_payload: list[dict], evidence_payload: list[dict], mode_key: str) -> str:
+    n_traits = len(traits_payload or [])
+    n_ev = len(evidence_payload or [])
+    if n_ev == 0:
+        return (
+            f"{category_name}: evidence is currently limited in this category. "
+            "Some traits have limited evidence available right now. "
+            "This category's evidence corpus is still loading. Trait cards are shown below. "
+            "Not medical advice."
+        )
+    if mode_key == "doctor":
+        return (
+            f"{category_name} overview: {n_traits} traits were processed with {n_ev} supporting snippets. "
+            "Evidence is limited for some traits, so interpretation remains cautious and non-diagnostic. "
+            "Not medical advice."
+        )
+    return (
+        f"{category_name} overview: we found {n_traits} traits with some supporting research snippets. "
+        "Some traits have limited evidence available right now. "
+        "These points are educational and not medical advice."
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def cached_generate_category_summary(
+    category_name: str,
+    traits_payload: list[dict],
+    evidence_payload: list[dict],
+    mode_key: str,
+):
+    if not evidence_payload:
+        return _category_summary_fallback(category_name, traits_payload, evidence_payload, mode_key)
+
+    system_prompt = (
+        "You are VivaGene. You must only write statements supported by the provided evidence snippets. "
+        "If a claim is not supported, you MUST say evidence is limited and do not infer. "
+        "No medical advice, no diagnosis, no treatment. Use cautious language: may/might/could. "
+        "Always attach citations like [PMID:12345678] to any scientific claim."
+    )
+    user_prompt = (
+        f"Mode: {'Patient' if mode_key == 'patient' else 'Doctor'}\n"
+        f"Category: {category_name}\n"
+        f"Trait summary table (compact JSON):\n{json.dumps(traits_payload, ensure_ascii=False)}\n\n"
+        f"Evidence snippets (compact):\n{json.dumps(evidence_payload, ensure_ascii=False)}\n\n"
+        f"Write a category summary that explains the main takeaways in {'patient' if mode_key == 'patient' else 'doctor'} style. "
+        "Keep it understandable. Only include claims supported by snippets and cite them.\n"
+        "Output format: Start with 1 sentence overview, then 4-6 bullet points, end with one line saying not medical advice."
+    )
+    raw = generate_with_fallback_messages(system_prompt, user_prompt)
+    txt = str(raw or "").strip()
+    if not txt:
+        return _category_summary_fallback(category_name, traits_payload, evidence_payload, mode_key)
+    if "not medical advice" not in txt.lower():
+        txt = txt.rstrip() + "\n\nNot medical advice."
+    if not evidence_payload and "limited evidence" not in txt.lower():
+        txt = txt.rstrip() + "\nSome traits have limited evidence available right now."
+    return txt
+
+
+def _normalize_citations_from_trait(trait_row: dict) -> list[dict]:
+    out = []
+    seen = set()
+    for c in trait_row.get("sources", trait_row.get("citations", [])) if isinstance(trait_row.get("sources", trait_row.get("citations", [])), list) else []:
+        if not isinstance(c, dict):
+            continue
+        pmid = str(c.get("pmid", "")).strip()
+        title = str(c.get("title", "")).strip() or "Study"
+        key = pmid or title
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({"pmid": pmid, "title": title})
+    return out[:3]
+
+
+def _fallback_trait_lifestyle(trait_row: dict) -> dict:
+    effect = str(trait_row.get("effect_label", "")).strip() or str(trait_row.get("signal_bucket", "")).strip() or "a trait tendency"
+    category = str(trait_row.get("category", "")).strip().lower() or "daily patterns"
+    return {
+        "one_liner": f"This signal may relate to {effect} in day-to-day {category} patterns.",
+        "bullets": [
+            f"May show subtle differences linked to {effect}.",
+            "Might vary based on sleep, stress, environment, and routine.",
+            "Could change over time and is not deterministic.",
+        ],
+        "citations": _normalize_citations_from_trait(trait_row),
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def cached_generate_category_trait_explainers(category_name: str, mode_key: str, traits_payload: list[dict]):
+    if not isinstance(traits_payload, list) or not traits_payload:
+        return {}
+    user_prompt = (
+        f"Mode: {'Patient' if mode_key == 'patient' else 'Doctor'}\n"
+        f"Category: {category_name}\n"
+        f"Trait summary table (compact JSON):\n{json.dumps(traits_payload, ensure_ascii=False)}\n\n"
+        "For each trait_id, return JSON only:\n"
+        "{ \"traits\": { \"TRAIT_ID\": { \"one_liner\": \"...\", \"bullets\": [\"...\",\"...\",\"...\"], "
+        "\"citations\": [{\"pmid\":\"...\",\"title\":\"...\"}] } } }\n"
+        "Rules:\n"
+        "- 8th-grade language for patient mode.\n"
+        "- Doctor mode may be more scientific.\n"
+        "- 1 short one-liner + 1-3 lifestyle bullets per trait.\n"
+        "- Use only provided citations. If no citations, include low-evidence wording and keep citations empty.\n"
+        "- No medical advice, diagnosis, treatment, or prescriptions.\n"
+    )
+    raw = generate_with_fallback_messages(LLM_SAFETY_SYSTEM, user_prompt)
+    obj = _safe_json_obj(raw)
+    traits = obj.get("traits", {}) if isinstance(obj.get("traits", {}), dict) else {}
+    out = {}
+    for t in traits_payload:
+        if not isinstance(t, dict):
+            continue
+        tid = str(t.get("trait_id", "")).strip()
+        model_row = traits.get(tid, {}) if isinstance(traits, dict) else {}
+        if not isinstance(model_row, dict):
+            model_row = {}
+        one_liner = " ".join(str(model_row.get("one_liner", "")).split()).strip()
+        bullets = model_row.get("bullets", [])
+        if not isinstance(bullets, list):
+            bullets = []
+        bullets = [" ".join(str(b).split()).strip() for b in bullets if str(b).strip()][:3]
+        cits = model_row.get("citations", [])
+        if not isinstance(cits, list):
+            cits = []
+        allowed = {str(c.get("pmid", "")).strip() for c in _normalize_citations_from_trait(t) if str(c.get("pmid", "")).strip()}
+        valid_cits = []
+        for c in cits:
+            if not isinstance(c, dict):
+                continue
+            pmid = str(c.get("pmid", "")).strip()
+            title = str(c.get("title", "")).strip() or "Study"
+            if pmid and allowed and pmid not in allowed:
+                continue
+            valid_cits.append({"pmid": pmid, "title": title})
+        if not one_liner:
+            fb = _fallback_trait_lifestyle(t)
+            one_liner = fb["one_liner"]
+            bullets = fb["bullets"]
+            valid_cits = fb["citations"]
+        out[tid] = {"one_liner": one_liner, "bullets": bullets, "citations": valid_cits}
+    return out
+
+
+def generate_category_summary(category_name: str, traits: list[dict], mode: str) -> dict:
+    mode_key = "doctor" if str(mode or "").lower().startswith("doctor") else "patient"
+    traits_payload = []
+    for t in traits if isinstance(traits, list) else []:
+        if not isinstance(t, dict):
+            continue
+        traits_payload.append(
+            {
+                "trait_id": str(t.get("trait_id", "")).strip(),
+                "trait_name": str(t.get("trait_name", "")).strip(),
+                "effect_label": str(t.get("effect_label", "")).strip(),
+                "signal_bucket": str(t.get("effect_level", t.get("bucket", ""))).strip(),
+                "evidence_strength": str(t.get("evidence_strength", "")).strip(),
+                "coverage": float(t.get("coverage", 0.0) or 0.0) if isinstance(t.get("coverage", 0.0), (int, float)) else 0.0,
+                "gene": str(t.get("gene", "")).strip(),
+                "rsids": [str(t.get("rsid", "")).strip()],
+                "citations": _normalize_citations_from_trait(t),
+            }
+        )
+    _, evidence_payload = build_category_evidence_bundle(category_name, traits)
+    txt = cached_generate_category_summary(category_name, traits_payload, evidence_payload, mode_key)
+    lines = [line.strip("- ").strip() for line in str(txt or "").splitlines() if line.strip()]
+    bullets = [line for line in lines if len(line) > 2][:6]
+    if not bullets:
+        bullets = [
+            f"{category_name} traits may influence everyday patterns, but effects can vary by person.",
+            "Some traits have limited evidence available right now.",
+            "Insights below are educational and should be interpreted cautiously.",
+            "Genes are one factor among sleep, stress, environment, and habits.",
+        ]
+    if len(bullets) < 3:
+        bullets = bullets + [
+            "Some traits have limited evidence available right now.",
+            "These insights are educational and not diagnostic.",
+        ]
+    cits = []
+    seen = set()
+    for t in traits_payload:
+        for c in t.get("citations", []):
+            pmid = str(c.get("pmid", "")).strip()
+            title = str(c.get("title", "")).strip() or "Study"
+            key = pmid or title
+            if key and key not in seen:
+                seen.add(key)
+                cits.append({"pmid": pmid, "title": title})
+    if mode_key == "doctor":
+        cits = cits[:6]
+    else:
+        cits = cits[:3]
+    return {"category": category_name, "bullets": bullets[:6], "citations": cits}
 
 
 def get_evidence_packets_cached(trait: dict, max_papers: int = 6):
@@ -773,11 +1148,50 @@ OPENROUTER_CLIENT = (
     else None
 )
 
-# Show errors in the UI instead of failing silently
-st.set_option("client.showErrorDetails", True)
+
+def get_llm_client(show_error: bool = True):
+    provider = get_secret("LLM_PROVIDER", "openrouter").lower()
+    model_default = "openai/gpt-4o-mini" if provider == "openrouter" else "gpt-4o-mini"
+    model = get_secret("LLM_MODEL", model_default)
+    openrouter_key = get_secret("OPENROUTER_API_KEY", "")
+    openai_key = get_secret("OPENAI_API_KEY", "")
+    client = None
+    active_provider = provider
+
+    if OpenAI is None:
+        st.error("OpenAI client library is not available. Install dependencies from requirements.txt.")
+        return None, "", active_provider
+
+    if provider == "openrouter":
+        if openrouter_key:
+            client = OpenAI(api_key=openrouter_key, base_url="https://openrouter.ai/api/v1")
+        elif openai_key:
+            active_provider = "openai"
+            client = OpenAI(api_key=openai_key)
+            model = get_secret("LLM_MODEL", "gpt-4o-mini")
+    else:
+        if openai_key:
+            client = OpenAI(api_key=openai_key)
+            model = get_secret("LLM_MODEL", "gpt-4o-mini")
+        elif openrouter_key:
+            active_provider = "openrouter"
+            client = OpenAI(api_key=openrouter_key, base_url="https://openrouter.ai/api/v1")
+            model = get_secret("LLM_MODEL", "openai/gpt-4o-mini")
+
+    if client is None and show_error and not st.session_state.get("_llm_missing_warned", False):
+        st.error(
+            "LLM credentials are missing. Set Streamlit Cloud secrets: OPENROUTER_API_KEY (preferred) "
+            "or OPENAI_API_KEY. Optional: LLM_PROVIDER and LLM_MODEL."
+        )
+        st.session_state["_llm_missing_warned"] = True
+    return client, model, active_provider
+
+# Hide detailed tracebacks in UI; show friendly errors instead.
+st.set_option("client.showErrorDetails", False)
 
 def generate_ai_summary(report: dict) -> str:
-    if not OPENROUTER_CLIENT:
+    client, _, _ = get_llm_client()
+    if not client:
         return {"overview": "", "top_insights": [], "evidence": {}}
 
     report = normalize_report(report)
@@ -933,23 +1347,59 @@ def insights_to_chat_summary(payload: dict) -> str:
 
 def generate_with_fallback_model(prompt: str) -> str:
     """Generate text via OpenRouter using an OpenAI-compatible client."""
-    if not OPENROUTER_CLIENT:
+    client, model, _ = get_llm_client(show_error=False)
+    if not client:
         return ""
-    response = OPENROUTER_CLIENT.chat.completions.create(
-        model=OPENROUTER_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a careful genetics educator. Educational content only. "
-                    "Do not provide medical advice, diagnosis, or treatment recommendations."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.7,
-    )
-    return (response.choices[0].message.content or "").strip()
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a careful genetics educator. Educational content only. "
+                            "Do not provide medical advice, diagnosis, or treatment recommendations."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                timeout=30,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception as e:
+            msg = str(e)
+            if ("429" in msg or "503" in msg) and attempt < 2:
+                time.sleep(1.2 * (attempt + 1))
+                continue
+            return ""
+    return ""
+
+
+def generate_with_fallback_messages(system_prompt: str, user_prompt: str) -> str:
+    client, model, _ = get_llm_client(show_error=False)
+    if not client:
+        return ""
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": str(system_prompt or "")},
+                    {"role": "user", "content": str(user_prompt or "")},
+                ],
+                temperature=0.3,
+                timeout=30,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception as e:
+            msg = str(e)
+            if ("429" in msg or "503" in msg) and attempt < 2:
+                time.sleep(1.2 * (attempt + 1))
+                continue
+            return ""
+    return ""
 
 
 def is_red_flag_trait(trait: dict) -> bool:
@@ -1047,7 +1497,8 @@ def generate_trait_annotation(trait: dict, evidence_packets):
     if not citations and "Evidence retrieval pending." not in default_life:
         default_life += " Evidence retrieval pending."
 
-    if not OPENROUTER_CLIENT:
+    client, _, _ = get_llm_client()
+    if not client:
         return {"life_impact": default_life, "red_flag": default_red, "citations": citations}
 
     evidence_snippets = []
@@ -1116,6 +1567,76 @@ def build_local_lifestyle_plan(report: dict) -> str:
         "Caffeine and stimulants: Start with smaller doses earlier in the day and avoid late-afternoon intake.\n\n"
         "Everyday habits: Change one variable at a time for 2-3 weeks and keep simple notes so you can spot patterns."
     )
+
+
+def _collect_report_sources(report: dict, limit: int = 10) -> list[str]:
+    rep = normalize_report(report if isinstance(report, dict) else {})
+    lines = []
+    seen = set()
+    for t in rep.get("traits", []):
+        if not isinstance(t, dict):
+            continue
+        source_list = t.get("sources", t.get("citations", []))
+        if not isinstance(source_list, list):
+            continue
+        for c in source_list:
+            if not isinstance(c, dict):
+                continue
+            pmid = str(c.get("pmid", "")).strip()
+            title = str(c.get("title", "")).strip() or "Study"
+            year = str(c.get("year", "")).strip()
+            key = pmid or title
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ident = f"PMID:{pmid}" if pmid else title
+            lines.append(f"- {ident} — {title}{f' ({year})' if year else ''}")
+            if len(lines) >= limit:
+                return lines
+    return lines
+
+
+def generate_lifestyle_plan(report: dict, mode: str = "patient") -> str:
+    rep = normalize_report(report if isinstance(report, dict) else {})
+    traits = [t for t in rep.get("traits", []) if isinstance(t, dict)][:25]
+    mode_key = str(mode or "patient").strip().lower()
+    clinician_line = "If you have concerns, discuss this with a clinician or a genetic counselor."
+    safe_system = (
+        "You are a cautious lifestyle educator. No medical advice, no diagnosis, no treatment, "
+        "no supplement or medication instructions. Provide only gentle, general ideas."
+    )
+    context = {
+        "mode": mode_key,
+        "traits": [
+            {
+                "trait_name": t.get("trait_name", ""),
+                "category": t.get("category", ""),
+                "bucket": t.get("effect_level", t.get("bucket", "")),
+                "summary": t.get("_final_summary", ""),
+            }
+            for t in traits
+        ],
+    }
+    prompt = f"""
+{safe_system}
+
+Generate a short plan with sections:
+Sleep, Focus, Nutrition, Fitness, Liver (only if present).
+Each section: 3-5 gentle ideas. Cautious language only.
+Never diagnose or prescribe.
+End with: "{clinician_line}"
+Mode: {mode_key}
+Context JSON:
+{json.dumps(context, ensure_ascii=False)}
+"""
+    text = generate_with_fallback_model(prompt)
+    if not text.strip():
+        text = build_local_lifestyle_plan(rep)
+    if mode_key.startswith("doctor"):
+        src = _collect_report_sources(rep, limit=8)
+        if src:
+            text = text.rstrip() + "\n\nSuggested reading\n" + "\n".join(src)
+    return text
 
 
 def build_local_chat_reply(user_input: str, report: dict) -> str:
@@ -1591,6 +2112,27 @@ st.markdown(
     .trait-sources ul { margin: 6px 0 0 18px; }
     .trait-sources li { margin: 4px 0; }
     .trait-muted { color: #6b7280 !important; }
+    .category-summary-box {
+      background: #ffffff;
+      border: 1px solid rgba(15,23,42,0.10);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .category-summary-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #111827 !important;
+    }
+    .category-summary-body {
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: #111827 !important;
+      white-space: pre-wrap;
+    }
 
     /* Small “chip” label */
     .chip {
@@ -1688,43 +2230,10 @@ begin_page_wrap()
               
            
 # ---------- Newsletter state ----------
-if "hide_newsletter" not in st.session_state:
-    st.session_state.hide_newsletter = False
 if "report_processing" not in st.session_state:
     st.session_state.report_processing = False
 if "evidence_processing" not in st.session_state:
     st.session_state.evidence_processing = False
-
-
-def newsletter_block(location_text: str):
-    if st.session_state.hide_newsletter:
-        return
-
-    with st.container():
-        st.markdown(
-            f"<div class='small-label'>Stay in the loop</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            "<div class='newsletter-modal'>"
-            "<div class='newsletter-title'>Get VivaGene project updates</div>"
-            "<div class='newsletter-sub'>Receive updates on trait curation and evidence coverage. "
-            "Optional email report delivery is planned for future releases.</div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        cols = st.columns([3, 1])
-        with cols[0]:
-            email = st.text_input("Email address", key=f"newsletter_{location_text}")
-        with cols[1]:
-            st.write("")
-            if st.button("Notify me", key=f"notify_{location_text}"):
-                if email.strip():
-                    st.success("Thanks for subscribing. In a real deployment this would save to a mailing list.")
-                    st.session_state.hide_newsletter = True
-                else:
-                    st.warning("Please enter an email.")
-        st.markdown("", unsafe_allow_html=False)
 
 
 # ---------- Trait DB helper ----------
@@ -1965,9 +2474,6 @@ if page == "Home":
             unsafe_allow_html=True,
         )
 
-    with col_right:
-        newsletter_block("home")
-
     # Why choose VivaGene
     st.markdown('<div class="section-title">Why choose VivaGene?</div>', unsafe_allow_html=True)
     st.markdown(
@@ -2189,8 +2695,6 @@ elif page == "Upload & Report":
             """
         )
 
-    newsletter_block("upload")
-
     if is_dev_mode():
         stats = get_trait_db_stats(TRAITS_JSON_PATH)
         st.markdown("#### DEV CHECK")
@@ -2210,23 +2714,10 @@ elif page == "Upload & Report":
             "The file should contain at least rsid and genotype columns."
         )
 
-        st.markdown("#### Where should results go?")
-        email_for_result = st.text_input(
-            "Optional email (for a future version that emails the PDF)",
-            placeholder="you@example.com",
-        )
-
-        categories_selected = st.multiselect(
-            "Trait categories",
-            options=["Neurobehavior", "Nutrition", "Fitness", "Liver"],
-            default=["Neurobehavior", "Nutrition", "Fitness"],
-        )
+        categories_selected = ["Neurobehavior", "Nutrition", "Fitness", "Liver"]
+        include_optional_liver = True
         explain_mode = st.radio("Explanation style", ["Patient (simple)", "Doctor (technical)"], horizontal=True)
         st.session_state["explain_mode"] = explain_mode
-        include_optional_liver = st.checkbox("Include Liver category (optional)", value=False)
-        st.session_state["include_liver"] = include_optional_liver
-        show_only_found = st.checkbox("Show only traits found in file", value=True)
-        st.session_state["show_only_found"] = show_only_found
         max_refresh_traits = st.number_input(
             "Evidence refresh batch size",
             min_value=1,
@@ -2273,21 +2764,36 @@ elif page == "Upload & Report":
                     "<div class='skeleton'>Preparing report components... parsing upload, matching traits, and checking evidence.</div>",
                     unsafe_allow_html=True,
                 )
-                temp_path = BASE_DIR / "uploaded_genome.txt"
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded.getvalue())
-                genotype_path = str(temp_path)
-                parsed_variants = parse_genotype_file(genotype_path)
-                parsed_rsids = {str(v.get("rsid", "")).strip() for v in parsed_variants if isinstance(v, dict) and str(v.get("rsid", "")).strip()}
-                overlap_debug = compute_category_overlap(parsed_rsids, include_optional_liver)
+                file_bytes = uploaded.getvalue()
+                ghash = genotype_hash_from_bytes(file_bytes)
+                cache_key = (
+                    ghash,
+                    tuple(categories_selected),
+                    bool(include_optional_liver),
+                    str(explain_mode),
+                    ENGINE_VERSION,
+                )
 
                 try:
-                    report = build_prs_report_from_upload(
-                        genotype_path=genotype_path,
-                        categories_selected=categories_selected,
-                        include_optional_liver=include_optional_liver,
-                        red_flag_only=False,
-                    )
+                    with st.status("Running analysis", expanded=True) as status:
+                        status.write("1/5 Parsing genotype")
+                        persist_uploaded_file(file_bytes, ghash)
+                        parsed_variants = cached_parse_genotype(ghash)
+
+                        status.write("2/5 Computing PRS")
+                        cached_report = st.session_state.get("analysis_cache", {})
+                        if isinstance(cached_report, dict) and cached_report.get("key") == cache_key:
+                            report = normalize_report(cached_report.get("report", {}))
+                        else:
+                            report = cached_build_base_report(ghash, tuple(categories_selected), include_optional_liver)
+                            report = normalize_report(report)
+                            st.session_state["analysis_cache"] = {"key": cache_key, "report": report}
+
+                        status.write("3/5 Retrieving evidence")
+                        status.write("4/5 Generating explanations")
+                        status.write("5/5 Rendering report")
+                        status.update(label="Analysis complete", state="complete")
+
                     report = normalize_report(report)
                     if not isinstance(report, dict):
                         raise ValueError("Report generation failed: expected a dict report object.")
@@ -2295,19 +2801,6 @@ elif page == "Upload & Report":
 
                     # Save for chatbot
                     st.session_state.last_report = report
-                    with st.expander("Debug: parser and category overlap"):
-                        st.write(f"Parsed variants: {len(parsed_variants)}")
-                        st.write(f"First 10 rsIDs: {sorted(list(parsed_rsids))[:10]}")
-                        for cat in ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver"] if include_optional_liver else []):
-                            info = overlap_debug.get(cat, {})
-                            st.write(
-                                f"{cat} overlap count: {info.get('overlap_count', 0)} "
-                                f"(panel rsIDs: {info.get('panel_rsids', 0)})"
-                            )
-                        if int(overlap_debug.get("Neurobehavior", {}).get("overlap_count", 0) or 0) == 0:
-                            st.info(
-                                "Your uploaded file does not contain the rsIDs used by the Neurobehavior panel (0 matches). This is normal for some genotype exports or filtered demo files."
-                            )
 
                     if not report.get("traits"):
                         st.warning("No traits were matched. Check that the file uses the expected rsIDs and genotypes.")
@@ -2351,79 +2844,242 @@ elif page == "Upload & Report":
 
                         grouped = {"Neurobehavior": [], "Nutrition": [], "Fitness": [], "Liver": []}
                         mode_now = st.session_state.get("explain_mode", "Patient (simple)")
-                        show_only_found_now = bool(st.session_state.get("show_only_found", True))
+                        mode_key = "doctor" if "Doctor" in mode_now else "patient"
+                        fallback_count = 0
                         if not enriched_traits:
                             st.error("No traits were loaded from analysis output. Please verify file format and rerun.")
+                        final_cache = st.session_state.get("analysis_final_cache", {})
+                        if isinstance(final_cache, dict) and final_cache.get("key") == cache_key:
+                            grouped = final_cache.get("grouped", grouped)
+                            enriched_traits = final_cache.get("enriched_traits", enriched_traits)
+                            fallback_count = int(final_cache.get("fallback_count", 0) or 0)
+                        else:
+                            enrich_status = st.status("Preparing trait explanations", expanded=False)
+                            work_traits = []
+                            for trait in enriched_traits:
+                                if not isinstance(trait, dict):
+                                    continue
+                                raw_cat = " ".join(
+                                    [
+                                        str(trait.get("category", "")),
+                                        str(trait.get("track", "")),
+                                        str(trait.get("subcategory", "")),
+                                        str(trait.get("trait_name", "")),
+                                    ]
+                                )
+                                norm_cat = normalize_category(raw_cat) or "Neurobehavior"
+                                coverage = float(trait.get("coverage", 0.0) or 0.0) if isinstance(trait.get("coverage", 0.0), (int, float)) else 0.0
+                                has_any_variant = coverage > 0.0
+                                trait["has_any_variant"] = has_any_variant
+                                trait.setdefault("present_variants", [])
+                                trait.setdefault("missing_variants", [])
+                                trait["_normalized_category"] = norm_cat
+                                work_traits.append(trait)
 
-                        for trait in enriched_traits:
-                            if not isinstance(trait, dict):
-                                continue
-                            raw_cat = " ".join(
-                                [
-                                    str(trait.get("category", "")),
-                                    str(trait.get("track", "")),
-                                    str(trait.get("subcategory", "")),
-                                    str(trait.get("trait_name", "")),
-                                ]
-                            )
-                            norm_cat = normalize_category(raw_cat)
-                            if not norm_cat:
-                                norm_cat = "Neurobehavior"
-                            if norm_cat == "Liver" and not include_optional_liver:
-                                continue
+                            enrich_status.write("a) Parsing genotype")
+                            enrich_status.write("b) Computing PRS")
+                            enrich_status.write(f"c) Retrieving evidence ({len(work_traits)} traits)")
 
-                            coverage = float(trait.get("coverage", 0.0) or 0.0) if isinstance(trait.get("coverage", 0.0), (int, float)) else 0.0
-                            has_any_variant = coverage > 0.0
-                            trait["has_any_variant"] = has_any_variant
-                            trait.setdefault("present_variants", [])
-                            trait.setdefault("missing_variants", [])
-                            if show_only_found_now and not has_any_variant:
-                                continue
+                            evid_by_id = {}
+                            if work_traits:
+                                with ThreadPoolExecutor(max_workers=6) as pool:
+                                    futures = {
+                                        pool.submit(
+                                            cached_retrieve_trait_evidence,
+                                            {
+                                                "trait_id": trait.get("trait_id", ""),
+                                                "trait_name": trait.get("trait_name", ""),
+                                                "category": trait.get("_normalized_category", ""),
+                                                "gene": trait.get("gene", ""),
+                                                "rsid": trait.get("rsid", ""),
+                                            },
+                                        ): str(trait.get("trait_id", ""))
+                                        for trait in work_traits
+                                    }
+                                    for fut in as_completed(futures):
+                                        tid = futures[fut]
+                                        try:
+                                            evid_by_id[tid] = fut.result()
+                                        except Exception:
+                                            evid_by_id[tid] = {"status": "missing", "queries": [], "snippets": [], "citations": []}
 
-                            evidence = ensure_trait_evidence(
-                                {
-                                    "trait_id": trait.get("trait_id", ""),
-                                    "trait_name": trait.get("trait_name", ""),
-                                    "category": norm_cat,
-                                    "gene": trait.get("gene", ""),
-                                    "rsid": trait.get("rsid", ""),
-                                },
-                                min_citations=2,
-                                min_snippets=2,
-                                max_results=8,
-                            )
-                            exp = build_explanation(trait, evidence, mode_now)
-                            summary_src = exp.get("doctor_summary", "") if "Doctor" in mode_now else exp.get("patient_summary", "")
-                            summary_txt = two_sentence_text(summary_src or exp.get("summary", ""))
-                            life_txt = two_sentence_text(exp.get("life_impact", ""))
-                            if not has_any_variant:
-                                summary_txt = "No variants found in the uploaded file for this trait. General evidence is shown below, but no user-specific claim is made."
+                            enrich_status.write(f"d) Generating explanations ({len(work_traits)} traits)")
+                            expl_by_id = {}
+                            if work_traits:
+                                with ThreadPoolExecutor(max_workers=3) as pool:
+                                    futures = {}
+                                    for trait in work_traits:
+                                        tid = str(trait.get("trait_id", ""))
+                                        ev = evid_by_id.get(tid, {"status": "missing", "queries": [], "snippets": [], "citations": []})
+                                        snippets_for_mode = ev.get("snippets", []) if isinstance(ev.get("snippets", []), list) else []
+                                        futures[pool.submit(cached_generate_trait_explanation, trait, snippets_for_mode, mode_key)] = tid
+                                    for fut in as_completed(futures):
+                                        tid = futures[fut]
+                                        try:
+                                            expl_by_id[tid] = fut.result()
+                                        except Exception:
+                                            expl_by_id[tid] = {
+                                                "explanation": "Evidence pending — no explanatory claims shown yet (RAG safety).",
+                                                "sources": [],
+                                                "status": "missing",
+                                                "used_fallback": True,
+                                            }
+
+                            for trait in work_traits:
+                                tid = str(trait.get("trait_id", ""))
+                                evidence = evid_by_id.get(tid, {"status": "missing", "queries": [], "snippets": [], "citations": []})
+                                exp = expl_by_id.get(
+                                    tid,
+                                    {
+                                        "explanation": "Evidence pending — no explanatory claims shown yet (RAG safety).",
+                                        "sources": [],
+                                        "status": "missing",
+                                        "used_fallback": True,
+                                    },
+                                )
+
+                                summary_txt = two_sentence_text(exp.get("explanation", ""))
                                 life_txt = ""
-                            if "Evidence pending" in summary_txt:
-                                life_txt = ""
-                            if "Doctor" in mode_now and summary_txt and "Evidence pending" not in summary_txt:
-                                if "[PMID:" not in summary_txt and "[PMCID:" not in summary_txt and "[DOI:" not in summary_txt:
-                                    summary_txt = "Evidence pending — no explanatory claims shown yet (RAG safety)."
+                                if not trait.get("has_any_variant", False):
+                                    summary_txt = "No variants found in the uploaded file for this trait. General evidence is shown below, but no user-specific claim is made."
+                                if exp.get("used_fallback", False):
+                                    fallback_count += 1
+                                if "Evidence pending" in summary_txt or "could not retrieve enough research" in summary_txt.lower():
                                     life_txt = ""
-                            trait["_final_summary"] = summary_txt
-                            trait["_final_life_impact"] = life_txt
-                            trait["_queries_used"] = exp.get("queries_used", [])
-                            trait["_final_citations"] = exp.get("citations", []) if isinstance(exp.get("citations", []), list) else []
-                            trait["citations"] = trait["_final_citations"]
-                            trait["_normalized_category"] = norm_cat
-                            grouped.setdefault(norm_cat, []).append(trait)
+                                if "Doctor" in mode_now and summary_txt and "Evidence pending" not in summary_txt:
+                                    if "[PMID:" not in summary_txt and "[PMCID:" not in summary_txt and "[DOI:" not in summary_txt:
+                                        summary_txt = "Evidence pending — no explanatory claims shown yet (RAG safety)."
+                                        life_txt = ""
+
+                                trait["_final_summary"] = summary_txt
+                                trait["_final_life_impact"] = life_txt
+                                trait["_queries_used"] = evidence.get("queries", []) if isinstance(evidence.get("queries", []), list) else []
+                                trait["_final_citations"] = exp.get("sources", []) if isinstance(exp.get("sources", []), list) else []
+                                trait["citations"] = trait["_final_citations"]
+                                trait["sources"] = trait["_final_citations"]
+                                trait["_evidence_snippets"] = evidence.get("snippets", []) if isinstance(evidence.get("snippets", []), list) else []
+                                trait["evidence_status"] = str(exp.get("status", evidence.get("status", "missing"))).strip()
+                                trait["explanation_patient"] = summary_txt
+                                trait["explanation_doctor"] = summary_txt
+                                grouped.setdefault(trait.get("_normalized_category", "Neurobehavior"), []).append(trait)
+
+                            enrich_status.write("e) Rendering report")
+                            enrich_status.update(label="Trait explanations ready", state="complete")
+                            st.session_state["analysis_final_cache"] = {
+                                "key": cache_key,
+                                "grouped": grouped,
+                                "enriched_traits": [x for rows in grouped.values() for x in rows if isinstance(x, dict)],
+                                "fallback_count": fallback_count,
+                            }
+
+                        if fallback_count > 0:
+                            st.warning("Some explanations used safe fallback due to an API or evidence retrieval error.")
+
+                        displayed_traits = [x for rows in grouped.values() for x in rows if isinstance(x, dict)]
+                        filtered_report = build_filtered_report(report, displayed_traits)
+                        st.session_state.last_report = filtered_report
+
+                        with st.spinner("Writing lifestyle explanations with citations..."):
+                            for cat_name, cat_traits in grouped.items():
+                                if not isinstance(cat_traits, list) or not cat_traits:
+                                    continue
+                                chunks = [cat_traits[i:i + 20] for i in range(0, len(cat_traits), 20)]
+                                merged = {}
+                                for chunk in chunks:
+                                    payload = []
+                                    for t in chunk:
+                                        if not isinstance(t, dict):
+                                            continue
+                                        payload.append(
+                                            {
+                                                "trait_id": str(t.get("trait_id", "")).strip(),
+                                                "trait_name": str(t.get("trait_name", "")).strip(),
+                                                "category": cat_name,
+                                                "gene": str(t.get("gene", "")).strip(),
+                                                "rsid": str(t.get("rsid", "")).strip(),
+                                                "genotype": str(t.get("user_genotype", "")).strip(),
+                                                "effect_label": str(t.get("effect_label", "")).strip(),
+                                                "signal_bucket": str(t.get("effect_level", t.get("bucket", ""))).strip(),
+                                                "evidence_strength": str(t.get("evidence_strength", "")).strip(),
+                                                "coverage": float(t.get("coverage", 0.0) or 0.0) if isinstance(t.get("coverage", 0.0), (int, float)) else 0.0,
+                                                "citations": _normalize_citations_from_trait(t),
+                                            }
+                                        )
+                                    merged.update(cached_generate_category_trait_explainers(cat_name, mode_key, payload))
+                                for t in cat_traits:
+                                    if not isinstance(t, dict):
+                                        continue
+                                    tid = str(t.get("trait_id", "")).strip()
+                                    row = merged.get(tid, _fallback_trait_lifestyle(t))
+                                    t["_lifestyle_one_liner"] = str(row.get("one_liner", "")).strip()
+                                    bul = row.get("bullets", [])
+                                    if not isinstance(bul, list):
+                                        bul = []
+                                    t["_lifestyle_bullets"] = [str(x).strip() for x in bul if str(x).strip()][:3]
+                                    cits = row.get("citations", [])
+                                    if not isinstance(cits, list):
+                                        cits = []
+                                    t["_lifestyle_citations"] = cits[:3]
+
+                        summary_cache_key = (
+                            ghash,
+                            mode_key,
+                            tuple(categories_selected),
+                            bool(include_optional_liver),
+                            ENGINE_VERSION,
+                        )
+                        existing_summary_cache = st.session_state.get("category_summary_cache", {})
+                        if isinstance(existing_summary_cache, dict) and existing_summary_cache.get("key") == summary_cache_key:
+                            category_summaries = existing_summary_cache.get("summaries", {})
+                        else:
+                            category_summaries = {}
+                            category_order = ["Neurobehavior", "Nutrition", "Fitness"]
+                            if grouped.get("Liver"):
+                                category_order.append("Liver")
+                            for cat_name in category_order:
+                                cat_traits = [t for t in grouped.get(cat_name, []) if isinstance(t, dict)]
+                                category_summaries[cat_name] = generate_category_summary(cat_name, cat_traits, mode_key)
+                            st.session_state["category_summary_cache"] = {
+                                "key": summary_cache_key,
+                                "summaries": category_summaries,
+                            }
+                        st.session_state["category_summaries"] = category_summaries
 
                         with st.container():
                             st.markdown("<div class='results-panel'>", unsafe_allow_html=True)
                             st.markdown("<div class='section-title'>Trait cards</div>", unsafe_allow_html=True)
-                            tab_labels = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver (optional)"] if include_optional_liver else [])
-                            tabs = st.tabs(tab_labels)
-                            tab_to_cat = [("Neurobehavior", tabs[0]), ("Nutrition", tabs[1]), ("Fitness", tabs[2])]
-                            if include_optional_liver:
-                                tab_to_cat.append(("Liver", tabs[3]))
+                            tab_to_cat_order = ["Neurobehavior", "Nutrition", "Fitness"] + (["Liver"] if grouped.get("Liver") else [])
+                            tabs = st.tabs(tab_to_cat_order)
+                            tab_to_cat = list(zip(tab_to_cat_order, tabs))
                             for cat_name, tab in tab_to_cat:
                                 with tab:
                                     st.markdown("<div class='results-scroll'>", unsafe_allow_html=True)
+                                    cat_summary = st.session_state.get("category_summaries", {}).get(cat_name, "")
+                                    if cat_summary:
+                                        if isinstance(cat_summary, dict):
+                                            bullets = cat_summary.get("bullets", [])
+                                            if not isinstance(bullets, list):
+                                                bullets = []
+                                            bullets_html = "<ul>" + "".join(f"<li>{_html_escape(str(b))}</li>" for b in bullets[:6]) + "</ul>"
+                                            cits = cat_summary.get("citations", [])
+                                            cite_line = ""
+                                            if isinstance(cits, list) and cits:
+                                                parts = []
+                                                for c in cits[:6]:
+                                                    if not isinstance(c, dict):
+                                                        continue
+                                                    pmid = str(c.get("pmid", "")).strip()
+                                                    title = str(c.get("title", "")).strip() or "Study"
+                                                    parts.append(f"{_html_escape(title)}{f' [PMID:{_html_escape(pmid)}]' if pmid else ''}")
+                                                if parts:
+                                                    cite_line = "<div class='trait-muted'><b>Sources:</b> " + "; ".join(parts) + "</div>"
+                                            summary_html = f"<div class='category-summary-body'>{bullets_html}{cite_line}</div>"
+                                        else:
+                                            summary_html = f"<div class='category-summary-body'>{_html_escape(str(cat_summary))}</div>"
+                                        st.markdown(
+                                            f"<div class='category-summary-box'><div class='category-summary-title'>Category summary</div>{summary_html}</div>",
+                                            unsafe_allow_html=True,
+                                        )
                                     cat_traits = grouped.get(cat_name, [])
                                     if not cat_traits:
                                         st.markdown(
@@ -2438,14 +3094,7 @@ elif page == "Upload & Report":
 
                         # Runtime integrity checks
                         rendered_count = sum(len(v) for v in grouped.values())
-                        expected_count = len(
-                            [
-                                t for t in enriched_traits
-                                if isinstance(t, dict)
-                                and (include_optional_liver or normalize_category(" ".join([str(t.get("category","")), str(t.get("track","")), str(t.get("subcategory","")), str(t.get("trait_name",""))])) != "Liver")
-                                and ((not show_only_found_now) or (isinstance(t.get("coverage", 0.0), (int, float)) and float(t.get("coverage", 0.0) or 0.0) > 0.0))
-                            ]
-                        )
+                        expected_count = len([t for t in enriched_traits if isinstance(t, dict)])
                         if rendered_count != expected_count:
                             st.warning(
                                 f"Integrity check: rendered trait cards ({rendered_count}) do not match expected displayed traits ({expected_count})."
@@ -2462,21 +3111,17 @@ elif page == "Upload & Report":
                         if bad_doctor_traits:
                             st.warning("Citation check: some doctor-mode summaries lacked explicit citations and were replaced with evidence-pending text.")
 
-                        text_report = generate_text_report(filtered_report)
-
-                        with st.expander("View technical text summary"):
-                            st.text(text_report)
-
                         st.markdown("### Detailed trait report")
                         html_report = generate_html_report(filtered_report, ai_summary=None)
                         if html_report is None:
                             html_report = ""
                         if not isinstance(html_report, str):
                             html_report = str(html_report)
-                        with st.expander("View report HTML source"):
-                            st.code(html_report, language="html")
+                        st.session_state["last_html_report"] = html_report
 
                         pdf_bytes = generate_pdf_report_bytes(filtered_report, mode_used=mode_now)
+                        st.session_state["last_pdf_bytes"] = pdf_bytes
+                        st.session_state["last_report_timestamp"] = time.time()
                         st.download_button(
                             label="Download PDF report",
                             data=pdf_bytes,
@@ -2484,20 +3129,13 @@ elif page == "Upload & Report":
                             mime="application/pdf",
                             key="download_pdf_report",
                         )
-
-                        if email_for_result.strip():
-                            st.info(
-                                f"In a future deployed version, this report could also be sent securely to {email_for_result.strip()} "
-                                "from a VivaGene email address."
-                            )
                     skeleton_slot.empty()
                     st.session_state.report_processing = False
 
                 except Exception as e:
                     st.session_state.report_processing = False
-                    st.error(f"Something went wrong while generating the report: {e}")
-                    with st.expander("Debug traceback"):
-                        st.code(traceback.format_exc(), language="text")
+                    st.error("Something went wrong while generating your report. Please check your file format and try again.")
+                    st.caption("If this keeps happening, contact the VivaGene team or check the app logs.")
 
     with col2:
         st.markdown("#### What your report looks like")
@@ -2572,6 +3210,8 @@ elif page == "Lifestyle Q&A":
 
     report = st.session_state.get("last_report")
     ai_summary = st.session_state.get("last_ai_summary")
+    mode_now = st.session_state.get("explain_mode", "Patient (simple)")
+    mode_key = "doctor" if "Doctor" in str(mode_now) else "patient"
 
     if not ack:
         st.info("Please acknowledge to continue.")
@@ -2581,25 +3221,8 @@ elif page == "Lifestyle Q&A":
     else:
         # Optionally generate a structured lifestyle overview plan
         if generate_plan_clicked:
-            lifestyle_context = f"Trait JSON:\n{report}\n\nAI summary of traits:\n{ai_summary or ''}"
-            lifestyle_system = (
-                "You are a careful genetics-informed lifestyle coach. "
-                "Given a structured trait report and an AI summary, create a short, non-medical lifestyle plan. "
-                "Organize the plan into sections such as Sleep, Focus & Learning, Movement & Recovery, Caffeine & Stimulants, "
-                "and Everyday Habits. For each section, list 3-5 gentle, practical ideas that could be helpful for someone with these traits. "
-                "Use tentative language (may, might, could) and remind the reader that this is not medical advice."
-            )
-
             try:
-                prompt = f"""
-{lifestyle_system}
-
-Context:
-{lifestyle_context}
-"""
-                lifestyle_plan = generate_with_fallback_model(prompt)
-                if not lifestyle_plan.strip():
-                    lifestyle_plan = build_local_lifestyle_plan(report)
+                lifestyle_plan = generate_lifestyle_plan(report, mode=mode_key)
                 st.session_state["lifestyle_plan"] = lifestyle_plan
 
                 with st.expander("View your current lifestyle plan", expanded=True):
@@ -2624,13 +3247,21 @@ Context:
             system_prompt = (
                 "You are a genetics informed lifestyle coach. "
                 "You receive a JSON report of traits and a short AI summary. "
-                "You may discuss possible lifestyle ideas related to sleep, focus, caffeine, training, and general wellness. "
-                "You must avoid medical advice, diagnosis, or treatment recommendations. "
+                "You may discuss gentle lifestyle ideas related to sleep, focus, caffeine, training, and general wellness. "
+                "You must avoid medical advice, diagnosis, or treatment recommendations and never prescribe medications or supplements. "
                 "Use careful language like may, might, and could, and encourage the user to talk with a clinician "
-                "or genetic counselor for any medical questions."
+                "or genetic counselor for any medical questions. "
+                f"Response mode is {mode_key}. "
+                "If doctor mode, include concise citation tags like [PMID:xxxx] only when available in context. "
+                "If patient mode, avoid dense citation blocks."
             )
 
-            context_snippet = f"Trait JSON:\n{report}\n\nSummary:\n{ai_summary or ''}"
+            cat_summaries = st.session_state.get("category_summaries", {})
+            context_snippet = (
+                f"Trait JSON:\n{report}\n\n"
+                f"Summary:\n{ai_summary or ''}\n\n"
+                f"Category summaries:\n{cat_summaries if isinstance(cat_summaries, dict) else {}}"
+            )
 
             with st.chat_message("assistant"):
                 try:
@@ -2646,6 +3277,10 @@ User question:
                     reply = generate_with_fallback_model(prompt)
                     if not reply.strip():
                         reply = build_local_chat_reply(user_input, report)
+                    if mode_key == "doctor":
+                        src = _collect_report_sources(report, limit=4)
+                        if src:
+                            reply = reply.rstrip() + "\n\nSuggested reading:\n" + "\n".join(src)
                 except Exception as e:
                     reply = f"There was an error calling the model: {e}"
 
@@ -2983,7 +3618,6 @@ elif page == "Contact":
 
     with st.form("contact_form"):
         name = st.text_input("Name")
-        email = st.text_input("Email")
         role = st.selectbox(
             "I am primarily a…",
             ["Student", "Educator", "Researcher or clinician", "Developer", "Other"],
@@ -2992,8 +3626,8 @@ elif page == "Contact":
         submitted = st.form_submit_button("Send message")
 
         if submitted:
-            if not (name.strip() and email.strip() and message.strip()):
-                st.warning("Please fill in name, email, and a brief message.")
+            if not (name.strip() and message.strip()):
+                st.warning("Please fill in name and a brief message.")
             else:
                 st.success(
                     "Thank you for reaching out. In a production environment this would send your message to the project owner."
