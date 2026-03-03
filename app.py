@@ -31,7 +31,7 @@ from evidence_guard import enforce_evidence_only
 from utils.evidence_retrieval import retrieve_trait_evidence
 from utils.rag_explainer import generate_trait_explanation
 from study_pack_loader import load_all_trait_packs
-from prompts import LLM_SAFETY_SYSTEM
+from utils.prompts import LLM_SAFETY_SYSTEM
 try:
     from openai import OpenAI
 except Exception:
